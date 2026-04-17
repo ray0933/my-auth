@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+*.db
+coverage/
+*.pem
+
+/src/generated/prisma
+
+# Screenshots and browser test artifacts
+*.png
+*.pdf
+frontend/.playwright-cli/
