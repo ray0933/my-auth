@@ -1,9 +1,24 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import { Loader2 } from 'lucide-react';
 import Layout from '../../components/Layout';
-import ConfirmModal from '../../components/ConfirmModal';
 import { api } from '../../lib/api';
 import { AxiosError } from 'axios';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose,
+} from '@/components/ui/dialog';
+import {
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+} from '@/components/ui/select';
 
 interface UserRow {
   id: string;
@@ -32,7 +47,6 @@ export default function AdminUsersPage() {
   const [createData, setCreateData] = useState({ email: '', displayName: '', roleId: '' });
   const [createError, setCreateError] = useState('');
   const [creating, setCreating] = useState(false);
-  const [actionError, setActionError] = useState('');
 
   async function load() {
     setLoading(true);
@@ -59,30 +73,30 @@ export default function AdminUsersPage() {
   });
 
   async function toggleActive(u: UserRow) {
-    setActionError('');
     try {
       await api.patch(`/admin/users/${u.id}`, { isActive: !u.isActive });
       setUsers((prev) => prev.map((x) => x.id === u.id ? { ...x, isActive: !u.isActive } : x));
+      toast.success(`User ${u.isActive ? 'deactivated' : 'activated'}.`);
     } catch {
-      setActionError('Failed to update user.');
+      toast.error('Failed to update user.');
     }
   }
 
   async function forcePasswordReset(u: UserRow) {
-    setActionError('');
     try {
       await api.post(`/admin/users/${u.id}/force-password-reset`);
+      toast.success('Password reset forced.');
     } catch {
-      setActionError('Failed.');
+      toast.error('Failed.');
     }
   }
 
   async function unlock(u: UserRow) {
-    setActionError('');
     try {
       await api.post(`/admin/users/${u.id}/unlock`);
+      toast.success('Account unlocked.');
     } catch {
-      setActionError('Failed.');
+      toast.error('Failed.');
     }
   }
 
@@ -91,8 +105,9 @@ export default function AdminUsersPage() {
     try {
       await api.delete(`/admin/users/${deleteTarget.id}`);
       setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id));
+      toast.success('User deleted.');
     } catch {
-      setActionError('Failed to delete user.');
+      toast.error('Failed to delete user.');
     }
     setDeleteTarget(null);
   }
@@ -109,6 +124,7 @@ export default function AdminUsersPage() {
       setShowCreate(false);
       setCreateData({ email: '', displayName: '', roleId: '' });
       load();
+      toast.success('User created.');
     } catch (err) {
       const axiosErr = err as AxiosError<{ error: { code: string; message: string } }>;
       setCreateError(axiosErr.response?.data?.error?.message ?? 'Failed to create user.');
@@ -121,139 +137,161 @@ export default function AdminUsersPage() {
     <Layout>
       <div>
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Users</h1>
-          <button onClick={() => setShowCreate(true)}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded text-sm font-medium">
-            + Create User
-          </button>
+          <h1 className="text-2xl font-semibold">Users</h1>
+          <Button onClick={() => setShowCreate(true)}>+ Create User</Button>
         </div>
 
-        {actionError && <p className="text-red-600 text-sm mb-4">{actionError}</p>}
-
         {/* Filters */}
-        <div className="flex gap-3 mb-4">
-          <input type="text" placeholder="Search email or name…" value={search} onChange={(e) => setSearch(e.target.value)}
-            className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex-1 max-w-xs" />
-          <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}
-            className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none">
-            <option value="">All roles</option>
-            {roles.map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
-          </select>
-          <select value={activeFilter} onChange={(e) => setActiveFilter(e.target.value as any)}
-            className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none">
-            <option value="all">All</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
+        <div className="flex gap-3 mb-4 flex-wrap">
+          <Input
+            type="text"
+            placeholder="Search email or name…"
+            value={search}
+            onChange={(e) => setSearch((e.target as HTMLInputElement).value)}
+            className="max-w-xs"
+          />
+          <Select value={roleFilter} onValueChange={(value) => setRoleFilter(value as string)}>
+            <SelectTrigger className="w-36">
+              <SelectValue placeholder="All roles" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">All roles</SelectItem>
+              {roles.map((r) => <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={activeFilter} onValueChange={(value) => setActiveFilter(value as 'all' | 'active' | 'inactive')}>
+            <SelectTrigger className="w-28">
+              <SelectValue placeholder="All" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <div className="space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-600 text-left">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Email</th>
-                  <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">Roles</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Created</th>
-                  <th className="px-4 py-3 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
+          <div className="rounded-xl ring-1 ring-foreground/10 overflow-hidden bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Roles</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {filtered.map((u) => (
-                  <tr key={u.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <button onClick={() => navigate(`/admin/users/${u.id}`)} className="text-indigo-600 hover:underline">
+                  <TableRow key={u.id}>
+                    <TableCell>
+                      <Button variant="link" className="h-auto p-0" onClick={() => navigate(`/admin/users/${u.id}`)}>
                         {u.email}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{u.displayName ?? '—'}</td>
-                    <td className="px-4 py-3">
-                      {u.roles.map((r) => (
-                        <span key={r} className="inline-block bg-indigo-100 text-indigo-800 text-xs px-1.5 py-0.5 rounded mr-1">
-                          {r}
-                        </span>
-                      ))}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded font-medium ${u.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'}`}>
-                        {u.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-500">{new Date(u.createdAt).toLocaleDateString()}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2 flex-wrap">
-                        <button onClick={() => toggleActive(u)} className="text-xs text-indigo-600 hover:underline">
-                          {u.isActive ? 'Deactivate' : 'Activate'}
-                        </button>
-                        <button onClick={() => forcePasswordReset(u)} className="text-xs text-yellow-600 hover:underline">Reset pwd</button>
-                        <button onClick={() => unlock(u)} className="text-xs text-green-600 hover:underline">Unlock</button>
-                        <button onClick={() => setDeleteTarget(u)} className="text-xs text-red-600 hover:underline">Delete</button>
+                      </Button>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{u.displayName ?? '—'}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-1 flex-wrap">
+                        {u.roles.map((r) => <Badge key={r} variant="secondary">{r}</Badge>)}
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={u.isActive ? 'secondary' : 'destructive'}>
+                        {u.isActive ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{new Date(u.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-2 flex-wrap">
+                        <Button variant="ghost" size="xs" onClick={() => toggleActive(u)}>
+                          {u.isActive ? 'Deactivate' : 'Activate'}
+                        </Button>
+                        <Button variant="ghost" size="xs" onClick={() => forcePasswordReset(u)}>Reset pwd</Button>
+                        <Button variant="ghost" size="xs" onClick={() => unlock(u)}>Unlock</Button>
+                        <Button variant="ghost" size="xs" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(u)}>Delete</Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 ))}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No users found.</td></tr>
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No users found.</TableCell>
+                  </TableRow>
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </div>
 
-      {deleteTarget && (
-        <ConfirmModal
-          title="Delete user"
-          message={`Are you sure you want to permanently delete ${deleteTarget.email}? This cannot be undone.`}
-          confirmLabel="Delete"
-          dangerous
-          onConfirm={deleteUser}
-          onCancel={() => setDeleteTarget(null)}
-        />
-      )}
+      {/* Delete confirm dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Delete user</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to permanently delete <strong>{deleteTarget?.email}</strong>? This cannot be undone.
+          </p>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            <Button variant="destructive" onClick={deleteUser}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {showCreate && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow max-w-md w-full mx-4">
-            <h2 className="text-lg font-semibold mb-4">Create user</h2>
-            {createError && <p className="text-red-600 text-sm mb-3">{createError}</p>}
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                <input type="email" value={createData.email} onChange={(e) => setCreateData((d) => ({ ...d, email: e.target.value }))}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Display name</label>
-                <input type="text" value={createData.displayName} onChange={(e) => setCreateData((d) => ({ ...d, displayName: e.target.value }))}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                <select value={createData.roleId} onChange={(e) => setCreateData((d) => ({ ...d, roleId: e.target.value }))}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none">
-                  <option value="">Select role…</option>
-                  {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                </select>
-              </div>
+      {/* Create user dialog */}
+      <Dialog open={showCreate} onOpenChange={(open) => { if (!open) { setShowCreate(false); setCreateError(''); } }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Create user</DialogTitle>
+          </DialogHeader>
+          {createError && <p className="text-destructive text-sm">{createError}</p>}
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>Email *</Label>
+              <Input
+                type="email"
+                value={createData.email}
+                onChange={(e) => setCreateData((d) => ({ ...d, email: (e.target as HTMLInputElement).value }))}
+              />
             </div>
-            <div className="flex gap-3 justify-end mt-5">
-              <button onClick={() => { setShowCreate(false); setCreateError(''); }}
-                className="px-4 py-2 text-gray-700 border border-gray-300 rounded hover:bg-gray-50 text-sm">Cancel</button>
-              <button onClick={createUser} disabled={creating || !createData.email}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-sm disabled:opacity-60">
-                {creating ? 'Creating…' : 'Create'}
-              </button>
+            <div className="space-y-1">
+              <Label>Display name</Label>
+              <Input
+                type="text"
+                value={createData.displayName}
+                onChange={(e) => setCreateData((d) => ({ ...d, displayName: (e.target as HTMLInputElement).value }))}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Role</Label>
+              <Select value={createData.roleId} onValueChange={(value) => setCreateData((d) => ({ ...d, roleId: value as string }))}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select role…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">No role</SelectItem>
+                  {roles.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
           </div>
-        </div>
-      )}
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            <Button onClick={createUser} disabled={creating || !createData.email}>
+              {creating ? <><Loader2 className="animate-spin" /> Creating…</> : 'Create'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }

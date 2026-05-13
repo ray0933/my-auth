@@ -1,17 +1,14 @@
 import { PrismaClient } from '@prisma/client';
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
+import { PrismaMssql } from '@prisma/adapter-mssql';
 import argon2 from 'argon2';
-import path from 'path';
-
-const DB_PATH = path.resolve(process.cwd(), 'prisma/test.db');
 
 export function createTestPrisma(): PrismaClient {
-  const adapter = new PrismaBetterSqlite3({ url: DB_PATH });
-  return new PrismaClient({ adapter } as ConstructorParameters<typeof PrismaClient>[0]);
+  const url = process.env.DATABASE_URL!;
+  const adapter = new PrismaMssql(url);
+  return new PrismaClient({ adapter });
 }
 
 export async function setupTestDb(prisma: PrismaClient) {
-
   await prisma.auditLog.deleteMany();
   await prisma.passwordResetToken.deleteMany();
   await prisma.refreshToken.deleteMany();

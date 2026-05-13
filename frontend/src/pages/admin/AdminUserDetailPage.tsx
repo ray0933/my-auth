@@ -1,8 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import Layout from '../../components/Layout';
-import ConfirmModal from '../../components/ConfirmModal';
 import { api } from '../../lib/api';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose,
+} from '@/components/ui/dialog';
+import {
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+} from '@/components/ui/select';
 
 interface UserDetail {
   id: string;
@@ -23,7 +35,6 @@ export default function AdminUserDetailPage() {
   const [displayName, setDisplayName] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
   const [addRoleId, setAddRoleId] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -45,10 +56,9 @@ export default function AdminUserDetailPage() {
     setSaving(true);
     try {
       await api.patch(`/admin/users/${id}`, { displayName, isActive });
-      setMsg('Saved.');
-      setTimeout(() => setMsg(''), 3000);
+      toast.success('Changes saved.');
     } catch {
-      setError('Failed to save.');
+      toast.error('Failed to save.');
     } finally {
       setSaving(false);
     }
@@ -75,17 +85,21 @@ export default function AdminUserDetailPage() {
   async function forceReset() {
     await api.post(`/admin/users/${id}/force-password-reset`);
     setShowResetModal(false);
-    setMsg('Password reset forced.');
-    setTimeout(() => setMsg(''), 3000);
+    toast.success('Password reset forced.');
   }
 
   async function unlock() {
     await api.post(`/admin/users/${id}/unlock`);
-    setMsg('Account unlocked.');
-    setTimeout(() => setMsg(''), 3000);
+    toast.success('Account unlocked.');
   }
 
-  if (!user) return <Layout><p className="text-gray-500">{error || 'Loading…'}</p></Layout>;
+  if (!user) {
+    return (
+      <Layout>
+        <p className="text-muted-foreground">{error || 'Loading…'}</p>
+      </Layout>
+    );
+  }
 
   const assignedIds = new Set(user.roles.map((r) => r.role.id));
   const availableRoles = allRoles.filter((r) => !assignedIds.has(r.id));
@@ -94,74 +108,116 @@ export default function AdminUserDetailPage() {
     <Layout>
       <div className="max-w-xl space-y-6">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/admin/users')} className="text-sm text-indigo-600 hover:underline">← Users</button>
-          <h1 className="text-2xl font-bold text-gray-900">{user.email}</h1>
+          <Button variant="link" className="h-auto p-0" onClick={() => navigate('/admin/users')}>← Users</Button>
+          <h1 className="text-2xl font-semibold">{user.email}</h1>
         </div>
 
-        {error && <p className="text-red-600 text-sm">{error}</p>}
-        {msg && <p className="text-green-600 text-sm">{msg}</p>}
+        {error && <p className="text-destructive text-sm">{error}</p>}
 
-        {/* Edit */}
-        <section className="bg-white rounded-lg shadow p-6 space-y-4">
-          <h2 className="text-lg font-semibold">Details</h2>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Display name</label>
-            <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="rounded" />
-            <span className="text-sm font-medium text-gray-700">Active</span>
-          </label>
-          <button onClick={save} disabled={saving}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded text-sm disabled:opacity-60">
-            {saving ? 'Saving…' : 'Save changes'}
-          </button>
-        </section>
+        {/* Details */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1">
+              <Label>Display name</Label>
+              <Input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName((e.target as HTMLInputElement).value)}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch checked={isActive} onCheckedChange={setIsActive} />
+              <Label>Active</Label>
+            </div>
+            <Button onClick={save} disabled={saving}>
+              {saving ? 'Saving…' : 'Save changes'}
+            </Button>
+          </CardContent>
+        </Card>
 
         {/* Roles */}
-        <section className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-3">Roles</h2>
-          <div className="flex flex-wrap gap-2 mb-3">
-            {user.roles.map((r) => (
-              <span key={r.role.id} className="flex items-center gap-1 bg-indigo-100 text-indigo-800 text-sm px-2 py-1 rounded">
-                {r.role.name}
-                <button onClick={() => removeRole(r.role.id)} className="text-indigo-500 hover:text-red-600 font-bold ml-1">×</button>
-              </span>
-            ))}
-          </div>
-          {availableRoles.length > 0 && (
-            <div className="flex gap-2">
-              <select value={addRoleId} onChange={(e) => setAddRoleId(e.target.value)}
-                className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none flex-1">
-                <option value="">Add role…</option>
-                {availableRoles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </select>
-              <button onClick={addRole} disabled={!addRoleId}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded text-sm disabled:opacity-60">Add</button>
+        <Card>
+          <CardHeader>
+            <CardTitle>Roles</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {user.roles.map((r) => (
+                <Badge key={r.role.id} variant="secondary" className="gap-1">
+                  {r.role.name}
+                  <button
+                    onClick={() => removeRole(r.role.id)}
+                    className="ml-1 text-muted-foreground hover:text-destructive"
+                  >
+                    ×
+                  </button>
+                </Badge>
+              ))}
             </div>
-          )}
-        </section>
+            {availableRoles.length > 0 && (
+              <div className="flex gap-2">
+                <Select value={addRoleId} onValueChange={(value) => setAddRoleId(value as string)}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Add role…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">—</SelectItem>
+                    {availableRoles.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Button onClick={addRole} disabled={!addRoleId}>Add</Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Danger Zone */}
-        <section className="bg-white rounded-lg shadow p-6 border border-red-200">
-          <h2 className="text-lg font-semibold text-red-700 mb-3">Danger zone</h2>
-          <div className="flex flex-wrap gap-3">
-            <button onClick={unlock} className="text-sm border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-50">Unlock account</button>
-            <button onClick={() => setShowResetModal(true)} className="text-sm border border-yellow-400 text-yellow-700 rounded px-3 py-1.5 hover:bg-yellow-50">Force password reset</button>
-            <button onClick={() => setShowDeleteModal(true)} className="text-sm bg-red-600 hover:bg-red-700 text-white rounded px-3 py-1.5">Delete user</button>
-          </div>
-        </section>
+        <Card className="ring-destructive/30">
+          <CardHeader>
+            <CardTitle className="text-destructive">Danger zone</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-3">
+              <Button variant="outline" size="sm" onClick={unlock}>Unlock account</Button>
+              <Button variant="outline" size="sm" className="border-yellow-400 text-yellow-700 hover:bg-yellow-50" onClick={() => setShowResetModal(true)}>
+                Force password reset
+              </Button>
+              <Button variant="destructive" size="sm" onClick={() => setShowDeleteModal(true)}>Delete user</Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {showDeleteModal && (
-        <ConfirmModal title="Delete user" message={`Permanently delete ${user.email}?`} confirmLabel="Delete" dangerous
-          onConfirm={deleteUser} onCancel={() => setShowDeleteModal(false)} />
-      )}
-      {showResetModal && (
-        <ConfirmModal title="Force password reset" message={`Force ${user.email} to change their password on next login?`}
-          onConfirm={forceReset} onCancel={() => setShowResetModal(false)} />
-      )}
+      {/* Delete confirm dialog */}
+      <Dialog open={showDeleteModal} onOpenChange={(open) => { if (!open) setShowDeleteModal(false); }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Delete user</DialogTitle>
+            <DialogDescription>Permanently delete {user.email}?</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            <Button variant="destructive" onClick={deleteUser}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Force reset confirm dialog */}
+      <Dialog open={showResetModal} onOpenChange={(open) => { if (!open) setShowResetModal(false); }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Force password reset</DialogTitle>
+            <DialogDescription>Force {user.email} to change their password on next login?</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            <Button onClick={forceReset}>Confirm</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }

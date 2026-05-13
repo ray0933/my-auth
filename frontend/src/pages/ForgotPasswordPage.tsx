@@ -4,15 +4,18 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { api } from '../lib/api';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const schema = z.object({ email: z.string().email('Enter a valid email') });
 type FormData = z.infer<typeof schema>;
 
 export default function ForgotPasswordPage() {
   const [submitted, setSubmitted] = useState(false);
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
-    resolver: zodResolver(schema),
-  });
+  const form = useForm<FormData>({ resolver: zodResolver(schema) });
 
   async function onSubmit(data: FormData) {
     try {
@@ -24,42 +27,46 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="bg-white p-8 rounded-lg shadow w-full max-w-md">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Forgot password</h1>
-        <p className="text-gray-600 text-sm mb-6">Enter your email and we'll send a reset link.</p>
-
-        {submitted ? (
-          <div className="p-4 bg-green-50 border border-green-200 text-green-800 rounded text-sm">
-            If that email is registered, a reset link has been sent.
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-              <input
-                id="email"
-                type="email"
-                {...register('email')}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                autoComplete="email"
-              />
-              {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email.message}</p>}
-            </div>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded text-sm font-medium disabled:opacity-60"
-            >
-              {isSubmitting ? 'Sending…' : 'Send reset link'}
-            </button>
-          </form>
-        )}
-
-        <p className="mt-4 text-sm">
-          <Link to="/login" className="text-indigo-600 hover:underline">Back to sign in</Link>
-        </p>
-      </div>
+    <div className="min-h-screen flex items-center justify-center bg-muted/30">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle className="text-2xl">Forgot password</CardTitle>
+          <CardDescription>Enter your email and we'll send a reset link.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {submitted ? (
+            <Alert>
+              <AlertDescription>
+                If that email is registered, a reset link has been sent.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input type="email" autoComplete="email" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
+                  {form.formState.isSubmitting ? 'Sending…' : 'Send reset link'}
+                </Button>
+              </form>
+            </Form>
+          )}
+          <p className="mt-4 text-sm text-muted-foreground">
+            <Link to="/login" className="text-primary hover:underline">Back to sign in</Link>
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

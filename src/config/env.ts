@@ -3,6 +3,7 @@ import 'dotenv/config';
 
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
+  SHADOW_DATABASE_URL: z.string().optional(),
   JWT_PRIVATE_KEY: z.string().min(1),
   JWT_PUBLIC_KEY: z.string().min(1),
   JWT_ACCESS_TTL: z.coerce.number().default(900),

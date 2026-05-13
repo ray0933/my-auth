@@ -1,14 +1,24 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import { Loader2 } from 'lucide-react';
 import Layout from '../../components/Layout';
-import ConfirmModal from '../../components/ConfirmModal';
 import { api } from '../../lib/api';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose,
+} from '@/components/ui/dialog';
 
 interface Permission { id: string; name: string; description: string | null; }
 
 export default function AdminPermissionsPage() {
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [creating, setCreating] = useState(false);
@@ -20,7 +30,7 @@ export default function AdminPermissionsPage() {
       const res = await api.get<{ data: Permission[] }>('/admin/permissions');
       setPermissions(res.data.data);
     } catch {
-      setError('Failed to load permissions.');
+      toast.error('Failed to load permissions.');
     } finally {
       setLoading(false);
     }
@@ -36,8 +46,9 @@ export default function AdminPermissionsPage() {
       setNewName('');
       setNewDesc('');
       load();
+      toast.success('Permission created.');
     } catch {
-      setError('Failed to create permission.');
+      toast.error('Failed to create permission.');
     } finally {
       setCreating(false);
     }
@@ -48,70 +59,88 @@ export default function AdminPermissionsPage() {
     await api.delete(`/admin/permissions/${deleteTarget.id}`);
     setDeleteTarget(null);
     load();
+    toast.success('Permission deleted.');
   }
 
   return (
     <Layout>
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Permissions</h1>
+        <h1 className="text-2xl font-semibold mb-6">Permissions</h1>
 
-        {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
-
-        {/* Create */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6 flex gap-3 items-end">
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-            <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. reports:read"
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        {/* Create form */}
+        <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-4 mb-6">
+          <div className="flex gap-3 items-end flex-wrap">
+            <div className="flex-1 min-w-40 space-y-1">
+              <Label>Name *</Label>
+              <Input
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName((e.target as HTMLInputElement).value)}
+                placeholder="e.g. reports:read"
+              />
+            </div>
+            <div className="flex-1 min-w-40 space-y-1">
+              <Label>Description</Label>
+              <Input
+                type="text"
+                value={newDesc}
+                onChange={(e) => setNewDesc((e.target as HTMLInputElement).value)}
+              />
+            </div>
+            <Button onClick={createPermission} disabled={creating || !newName.trim()}>
+              {creating ? <><Loader2 className="animate-spin" /> Adding…</> : '+ Add'}
+            </Button>
           </div>
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <input type="text" value={newDesc} onChange={(e) => setNewDesc(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          </div>
-          <button onClick={createPermission} disabled={creating || !newName.trim()}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded text-sm disabled:opacity-60 whitespace-nowrap">
-            {creating ? 'Adding…' : '+ Add'}
-          </button>
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <div className="space-y-2">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-600 text-left">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">Description</th>
-                  <th className="px-4 py-3 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
+          <div className="rounded-xl ring-1 ring-foreground/10 overflow-hidden bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {permissions.map((p) => (
-                  <tr key={p.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-mono text-sm">{p.name}</td>
-                    <td className="px-4 py-3 text-gray-600">{p.description ?? '—'}</td>
-                    <td className="px-4 py-3">
-                      <button onClick={() => setDeleteTarget(p)} className="text-xs text-red-600 hover:underline">Delete</button>
-                    </td>
-                  </tr>
+                  <TableRow key={p.id}>
+                    <TableCell className="font-mono text-sm">{p.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{p.description ?? '—'}</TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="xs" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(p)}>Delete</Button>
+                    </TableCell>
+                  </TableRow>
                 ))}
                 {permissions.length === 0 && (
-                  <tr><td colSpan={3} className="px-4 py-8 text-center text-gray-400">No permissions yet.</td></tr>
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-center text-muted-foreground py-8">No permissions yet.</TableCell>
+                  </TableRow>
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </div>
 
-      {deleteTarget && (
-        <ConfirmModal title="Delete permission" message={`Delete permission "${deleteTarget.name}"?`} confirmLabel="Delete" dangerous
-          onConfirm={deletePermission} onCancel={() => setDeleteTarget(null)} />
-      )}
+      {/* Delete confirm dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Delete permission</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Delete permission "<strong>{deleteTarget?.name}</strong>"?</p>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            <Button variant="destructive" onClick={deletePermission}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }

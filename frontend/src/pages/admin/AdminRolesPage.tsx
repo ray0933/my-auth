@@ -1,7 +1,20 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import { Loader2 } from 'lucide-react';
 import Layout from '../../components/Layout';
-import ConfirmModal from '../../components/ConfirmModal';
 import { api } from '../../lib/api';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose,
+} from '@/components/ui/dialog';
 
 interface Permission { id: string; name: string; }
 interface RoleDetail {
@@ -15,7 +28,6 @@ export default function AdminRolesPage() {
   const [roles, setRoles] = useState<RoleDetail[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
 
   const [showCreate, setShowCreate] = useState(false);
   const [createData, setCreateData] = useState({ name: '', description: '' });
@@ -39,7 +51,7 @@ export default function AdminRolesPage() {
       setRoles(rolesRes.data.data);
       setPermissions(permsRes.data.data);
     } catch {
-      setError('Failed to load.');
+      toast.error('Failed to load.');
     } finally {
       setLoading(false);
     }
@@ -54,8 +66,9 @@ export default function AdminRolesPage() {
       setShowCreate(false);
       setCreateData({ name: '', description: '' });
       load();
+      toast.success('Role created.');
     } catch {
-      setError('Failed to create role.');
+      toast.error('Failed to create role.');
     } finally {
       setCreating(false);
     }
@@ -68,8 +81,9 @@ export default function AdminRolesPage() {
       await api.patch(`/admin/roles/${editRole.id}`, editData);
       setEditRole(null);
       load();
+      toast.success('Role saved.');
     } catch {
-      setError('Failed to save.');
+      toast.error('Failed to save.');
     } finally {
       setSaving(false);
     }
@@ -80,6 +94,7 @@ export default function AdminRolesPage() {
     await api.delete(`/admin/roles/${deleteTarget.id}`);
     setDeleteTarget(null);
     load();
+    toast.success('Role deleted.');
   }
 
   function openPermModal(role: RoleDetail) {
@@ -98,6 +113,7 @@ export default function AdminRolesPage() {
     ]);
     setPermTarget(null);
     load();
+    toast.success('Permissions saved.');
   }
 
   function togglePerm(id: string) {
@@ -112,133 +128,151 @@ export default function AdminRolesPage() {
     <Layout>
       <div>
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Roles</h1>
-          <button onClick={() => setShowCreate(true)}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded text-sm font-medium">
-            + Create Role
-          </button>
+          <h1 className="text-2xl font-semibold">Roles</h1>
+          <Button onClick={() => setShowCreate(true)}>+ Create Role</Button>
         </div>
 
-        {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
-
         {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <div className="space-y-2">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-600 text-left">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">Description</th>
-                  <th className="px-4 py-3 font-medium">Permissions</th>
-                  <th className="px-4 py-3 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
+          <div className="rounded-xl ring-1 ring-foreground/10 overflow-hidden bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Permissions</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {roles.map((r) => (
-                  <tr key={r.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium">{r.name}</td>
-                    <td className="px-4 py-3 text-gray-600">{r.description ?? '—'}</td>
-                    <td className="px-4 py-3 text-gray-500">{r.rolePermissions.length}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-3">
-                        <button onClick={() => { setEditRole(r); setEditData({ name: r.name, description: r.description ?? '' }); }}
-                          className="text-xs text-indigo-600 hover:underline">Edit</button>
-                        <button onClick={() => openPermModal(r)} className="text-xs text-green-600 hover:underline">Permissions</button>
-                        <button onClick={() => setDeleteTarget(r)} className="text-xs text-red-600 hover:underline">Delete</button>
+                  <TableRow key={r.id}>
+                    <TableCell className="font-medium">{r.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{r.description ?? '—'}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{r.rolePermissions.length}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" size="xs" onClick={() => { setEditRole(r); setEditData({ name: r.name, description: r.description ?? '' }); }}>Edit</Button>
+                        <Button variant="ghost" size="xs" onClick={() => openPermModal(r)}>Permissions</Button>
+                        <Button variant="ghost" size="xs" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(r)}>Delete</Button>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </div>
 
-      {/* Create Modal */}
-      {showCreate && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow max-w-sm w-full mx-4">
-            <h2 className="text-lg font-semibold mb-4">Create role</h2>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-                <input type="text" value={createData.name} onChange={(e) => setCreateData((d) => ({ ...d, name: e.target.value }))}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <input type="text" value={createData.description} onChange={(e) => setCreateData((d) => ({ ...d, description: e.target.value }))}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              </div>
+      {/* Create Role dialog */}
+      <Dialog open={showCreate} onOpenChange={(open) => { if (!open) setShowCreate(false); }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Create role</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>Name *</Label>
+              <Input
+                type="text"
+                value={createData.name}
+                onChange={(e) => setCreateData((d) => ({ ...d, name: (e.target as HTMLInputElement).value }))}
+              />
             </div>
-            <div className="flex gap-3 justify-end mt-5">
-              <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-gray-700 border border-gray-300 rounded hover:bg-gray-50 text-sm">Cancel</button>
-              <button onClick={createRole} disabled={creating || !createData.name}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-sm disabled:opacity-60">
-                {creating ? 'Creating…' : 'Create'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Modal */}
-      {editRole && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow max-w-sm w-full mx-4">
-            <h2 className="text-lg font-semibold mb-4">Edit role</h2>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                <input type="text" value={editData.name} onChange={(e) => setEditData((d) => ({ ...d, name: e.target.value }))}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <input type="text" value={editData.description} onChange={(e) => setEditData((d) => ({ ...d, description: e.target.value }))}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              </div>
-            </div>
-            <div className="flex gap-3 justify-end mt-5">
-              <button onClick={() => setEditRole(null)} className="px-4 py-2 text-gray-700 border border-gray-300 rounded hover:bg-gray-50 text-sm">Cancel</button>
-              <button onClick={saveEdit} disabled={saving}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-sm disabled:opacity-60">
-                {saving ? 'Saving…' : 'Save'}
-              </button>
+            <div className="space-y-1">
+              <Label>Description</Label>
+              <Input
+                type="text"
+                value={createData.description}
+                onChange={(e) => setCreateData((d) => ({ ...d, description: (e.target as HTMLInputElement).value }))}
+              />
             </div>
           </div>
-        </div>
-      )}
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            <Button onClick={createRole} disabled={creating || !createData.name}>
+              {creating ? <><Loader2 className="animate-spin" /> Creating…</> : 'Create'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {/* Permissions Modal */}
-      {permTarget && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow max-w-sm w-full mx-4">
-            <h2 className="text-lg font-semibold mb-4">Permissions for "{permTarget.name}"</h2>
-            <div className="space-y-2 max-h-60 overflow-y-auto mb-4">
-              {permissions.map((p) => (
-                <label key={p.id} className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={permSelection.has(p.id)} onChange={() => togglePerm(p.id)} className="rounded" />
-                  <span className="text-sm">{p.name}</span>
-                </label>
-              ))}
+      {/* Edit Role dialog */}
+      <Dialog open={!!editRole} onOpenChange={(open) => { if (!open) setEditRole(null); }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Edit role</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>Name</Label>
+              <Input
+                type="text"
+                value={editData.name}
+                onChange={(e) => setEditData((d) => ({ ...d, name: (e.target as HTMLInputElement).value }))}
+              />
             </div>
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setPermTarget(null)} className="px-4 py-2 text-gray-700 border border-gray-300 rounded hover:bg-gray-50 text-sm">Cancel</button>
-              <button onClick={savePerms} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-sm">Save</button>
+            <div className="space-y-1">
+              <Label>Description</Label>
+              <Input
+                type="text"
+                value={editData.description}
+                onChange={(e) => setEditData((d) => ({ ...d, description: (e.target as HTMLInputElement).value }))}
+              />
             </div>
           </div>
-        </div>
-      )}
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            <Button onClick={saveEdit} disabled={saving}>
+              {saving ? <><Loader2 className="animate-spin" /> Saving…</> : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {deleteTarget && (
-        <ConfirmModal title="Delete role" message={`Delete role "${deleteTarget.name}"?`} confirmLabel="Delete" dangerous
-          onConfirm={deleteRole} onCancel={() => setDeleteTarget(null)} />
-      )}
+      {/* Permissions dialog */}
+      <Dialog open={!!permTarget} onOpenChange={(open) => { if (!open) setPermTarget(null); }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Permissions for "{permTarget?.name}"</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {permissions.map((p) => (
+              <label key={p.id} className="flex items-center gap-2 cursor-pointer">
+                <Checkbox
+                  checked={permSelection.has(p.id)}
+                  onCheckedChange={() => togglePerm(p.id)}
+                />
+                <span className="text-sm">{p.name}</span>
+              </label>
+            ))}
+          </div>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            <Button onClick={savePerms}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirm dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Delete role</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Delete role "<strong>{deleteTarget?.name}</strong>"?</p>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            <Button variant="destructive" onClick={deleteRole}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }

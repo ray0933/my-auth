@@ -3,6 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { api } from '../lib/api';
 import { AxiosError } from 'axios';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import { Label } from '@/components/ui/label';
 
 export default function MfaSetupPage() {
   const navigate = useNavigate();
@@ -43,53 +48,58 @@ export default function MfaSetupPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="bg-white p-8 rounded-lg shadow w-full max-w-md">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Set up two-factor authentication</h1>
-        <p className="text-gray-600 text-sm mb-6">Scan the QR code with your authenticator app, then enter the 6-digit code.</p>
+    <div className="min-h-screen flex items-center justify-center bg-muted/30">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle className="text-2xl">Set up two-factor authentication</CardTitle>
+          <CardDescription>Scan the QR code with your authenticator app, then enter the 6-digit code.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {otpauthUri && (
+            <div className="flex justify-center">
+              <QRCodeSVG value={otpauthUri} size={192} />
+            </div>
+          )}
 
-        {otpauthUri && (
-          <div className="flex justify-center mb-4">
-            <QRCodeSVG value={otpauthUri} size={192} />
-          </div>
-        )}
+          {secret && (
+            <>
+              <Separator />
+              <div className="rounded-lg bg-muted p-3 text-center">
+                <p className="text-xs text-muted-foreground mb-1">Manual entry key</p>
+                <code className="text-sm font-mono break-all">{secret}</code>
+                <Button variant="link" size="sm" className="block mx-auto mt-1 h-auto p-0" onClick={copySecret}>
+                  {copied ? 'Copied!' : 'Copy'}
+                </Button>
+              </div>
+              <Separator />
+            </>
+          )}
 
-        {secret && (
-          <div className="mb-6 p-3 bg-gray-50 rounded border border-gray-200 text-center">
-            <p className="text-xs text-gray-500 mb-1">Manual entry key</p>
-            <code className="text-sm font-mono break-all">{secret}</code>
-            <button onClick={copySecret} className="block mx-auto mt-2 text-xs text-indigo-600 hover:underline">
-              {copied ? 'Copied!' : 'Copy'}
-            </button>
-          </div>
-        )}
+          {error && <p className="text-destructive text-sm">{error}</p>}
 
-        {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
-
-        <div className="space-y-3">
-          <div>
-            <label htmlFor="totp" className="block text-sm font-medium text-gray-700 mb-1">Verification code</label>
-            <input
+          <div className="space-y-2">
+            <Label htmlFor="totp">Verification code</Label>
+            <Input
               id="totp"
               type="text"
               inputMode="numeric"
               maxLength={6}
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              onChange={(e) => setCode((e.target as HTMLInputElement).value.replace(/\D/g, ''))}
+              className="text-center tracking-widest"
               autoComplete="one-time-code"
               autoFocus
             />
           </div>
-          <button
+          <Button
+            className="w-full"
             onClick={handleVerify}
             disabled={submitting || code.length !== 6}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded text-sm font-medium disabled:opacity-60"
           >
             {submitting ? 'Verifying…' : 'Enable MFA'}
-          </button>
-        </div>
-      </div>
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

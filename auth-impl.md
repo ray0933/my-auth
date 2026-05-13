@@ -1,7 +1,7 @@
 # Auth System — Implementation Plan & Todo Checklist
 
-**Spec version:** 1.2 | **Date:** April 2026  
-**Stack:** Node.js / TypeScript · Express · Prisma ORM · SQLite (dev) / MSSQL (prod)  
+**Spec version:** 1.3 | **Date:** April 2026  
+**Stack:** Node.js / TypeScript · Express · Prisma ORM · MSSQL (dev, local Docker container) / MSSQL (prod)  
 **Reference:** `auth-system-spec.md`
 
 ---
@@ -60,13 +60,14 @@
     "db:studio": "prisma studio"
   }
   ```
-- [ ] Create `.gitignore` (node_modules, dist, .env, *.db, coverage)
+- [ ] Create `.gitignore` (node_modules, dist, .env, coverage)
 - [ ] Create `vitest.config.ts` with coverage thresholds set to 80%
 
 ### 1.2 Environment Configuration
 
 - [ ] Create `.env.example` with all variables from spec Section 6.3:
-  - `DATABASE_URL`
+  - `DATABASE_URL` — e.g. `sqlserver://localhost:1433;database=authdev;user=sa;password=YourStrong@Password1;trustServerCertificate=true`
+  - `SHADOW_DATABASE_URL` — e.g. `sqlserver://localhost:1433;database=authdev_shadow;user=sa;password=YourStrong@Password1;trustServerCertificate=true`
   - `JWT_PRIVATE_KEY` (RS256 PEM, base64 or raw)
   - `JWT_PUBLIC_KEY`
   - `JWT_ACCESS_TTL` (default: 900)
@@ -79,7 +80,7 @@
   - `FRONTEND_URL`
   - `LOG_LEVEL` (default: info)
   - `NODE_ENV` (default: development)
-- [ ] Create `.env` for local development (copy from `.env.example`, fill in SQLite URL)
+- [ ] Create `.env` for local development (copy from `.env.example`; fill in `DATABASE_URL` and `SHADOW_DATABASE_URL` pointing at the local MSSQL container)
 - [ ] Generate RS256 key pair for local dev:
   ```bash
   openssl genrsa -out private.pem 2048
@@ -98,12 +99,39 @@
 
 > **Reference:** spec Section 3 (Database Schema) and Section 6.4 (Prisma Schema)
 
-### 2.1 Prisma Init
+### 2.1 Local SQL Server Container
+
+- [ ] Create `docker-compose.yml` in the project root:
+  ```yaml
+  version: '3.8'
+  services:
+    sqlserver:
+      image: mcr.microsoft.com/mssql/server:2022-latest
+      environment:
+        ACCEPT_EULA: "Y"
+        SA_PASSWORD: "YourStrong@Password1"
+      ports:
+        - "1433:1433"
+      volumes:
+        - sqlserver_data:/var/opt/mssql
+  volumes:
+    sqlserver_data:
+  ```
+- [ ] Run `docker compose up -d` and wait for the container to be healthy (allow ~15 s for SQL Server to start)
+- [ ] Create the two databases manually or via init script:
+  ```bash
+  docker exec -it <container> /opt/mssql-tools/bin/sqlcmd \
+    -S localhost -U sa -P 'YourStrong@Password1' \
+    -Q "CREATE DATABASE authdev; CREATE DATABASE authdev_shadow; CREATE DATABASE authdev_test;"
+  ```
+- [ ] Add `docker-compose.yml` to the project (not to `.gitignore`)
+
+### 2.2 Prisma Init
 
 - [ ] Run `npx prisma init` (creates `prisma/schema.prisma` and `.env` placeholder)
-- [ ] Set datasource provider to `"sqlite"` for dev, `DATABASE_URL="file:./dev.db"`
+- [ ] Set datasource provider to `"sqlserver"` and configure `DATABASE_URL` + `SHADOW_DATABASE_URL` from `.env`
 
-### 2.2 Define Models in `prisma/schema.prisma`
+### 2.3 Define Models in `prisma/schema.prisma`
 
 - [ ] **User** model with fields:
   - `id` (UUID, PK)
@@ -130,9 +158,9 @@
   - `id` (BigInt, autoincrement), `userId?`, `eventType`, `ipAddress?`, `userAgent?`, `metadata` (Json?), `createdAt`
   - Indexes: `@@index([userId])`, `@@index([eventType])`, `@@index([createdAt])` *(FR-09)*
 
-### 2.3 Migrate & Seed
+### 2.4 Migrate & Seed
 
-- [ ] Run `npx prisma migrate dev --name init` to apply schema
+- [ ] Run `npx prisma migrate dev --name init` to apply schema (Prisma uses `SHADOW_DATABASE_URL` internally for diffing — ensure both databases exist before running)
 - [ ] Create `prisma/seed.ts`:
   - Seed **3 roles**: `super_admin`, `admin`, `user` *(spec Section 10.1)*
   - Seed **8 permissions** from spec Section 10.2: `users:create`, `users:read`, `users:write`, `users:delete`, `roles:read`, `roles:write`, `permissions:write`, `audit:read`
@@ -605,7 +633,7 @@
 
 ### 10.2 Integration Tests (Supertest)
 
-> Use in-memory SQLite with `prisma migrate dev` in test setup. Reset DB between test suites.
+> Use the `authdev_test` database on the local MSSQL Docker container. Override `DATABASE_URL` to point at `authdev_test` in the test environment. Run `prisma migrate deploy` once in global test setup to apply the schema. Truncate all tables (not drop) between test suites to avoid re-migrating.
 
 - [ ] `tests/integration/auth/login.test.ts`
   - `POST /api/v1/auth/login` — valid credentials → 200 + access_token + cookie
@@ -719,6 +747,7 @@
 ## File Creation Checklist (All Files to Create)
 
 ### Config & Root
+- [ ] `docker-compose.yml`
 - [ ] `package.json`
 - [ ] `tsconfig.json`
 - [ ] `vitest.config.ts`
@@ -797,10 +826,19 @@
 - [ ] Create Vite + React + TypeScript project: `npm create vite@latest frontend -- --template react-ts`
 - [ ] Install runtime deps:
   ```
-  npm i react-router-dom axios react-hook-form zod @hookform/resolvers tailwindcss @tailwindcss/vite qrcode.react
+  npm i react-router-dom axios react-hook-form zod @hookform/resolvers tailwindcss @tailwindcss/vite qrcode.react lucide-react
   npm i -D @types/qrcode.react
   ```
 - [ ] Configure Tailwind CSS via `@tailwindcss/vite` plugin in `vite.config.ts`
+- [ ] Init shadcn/ui — run `npx shadcn@latest init` (select: TypeScript = yes, CSS variables = yes; shadcn will inject CSS variable definitions into `src/index.css` and create `src/lib/utils.ts` with `cn()`)
+- [ ] Add all required shadcn/ui components:
+  ```
+  npx shadcn@latest add button input label form card table dialog badge alert \
+    select checkbox switch separator tabs dropdown-menu skeleton sonner
+  ```
+- [ ] Confirm `src/lib/utils.ts` exports `cn()` (created automatically by shadcn init)
+- [ ] Confirm `src/components/ui/` directory was created with the component files above
+- [ ] Add `<Toaster />` (from `sonner`) to `src/main.tsx` or `src/App.tsx` so toasts are available globally
 - [ ] Add Vite dev server proxy in `vite.config.ts`:
   ```ts
   server: {
@@ -832,7 +870,7 @@
 
 ### 12.4 Route Guards
 
-- [ ] `<ProtectedRoute>` — if `isLoading` show spinner; if no user redirect to `/login`
+- [ ] `<ProtectedRoute>` — if `isLoading` show full-page `<Skeleton>` (shadcn); if no user redirect to `/login`
 - [ ] `<PasswordChangeGuard>` — if `user.mustChangePassword` redirect to `/change-password`
 - [ ] `<AdminRoute>` — if user lacks `admin`/`super_admin` role show 403 page or redirect to `/dashboard`
 
@@ -852,27 +890,30 @@
 
 ### 13.1 Login Page (`src/pages/LoginPage.tsx`)
 
-- [ ] Form: email input, password input (show/hide toggle), submit button
-- [ ] Use React Hook Form + Zod schema (email required, password required)
+- [ ] **shadcn/ui components**: `Card`, `CardHeader`, `CardContent`, `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`, `Input`, `Button`, `Alert`, `AlertDescription`
+- [ ] Form: `<Input type="email">`, `<Input type="password">` with `Eye`/`EyeOff` lucide icon toggle inside the input wrapper, `<Button type="submit">`
+- [ ] Use React Hook Form + Zod schema (email required, password required); wire via shadcn `<Form>` + `<FormField>` for automatic `FormMessage` error display
 - [ ] On submit: call `login()` from `AuthContext`
   - `requiresPasswordChange` → navigate to `/change-password`
   - MFA challenge → navigate to `/mfa/verify` passing challenge state
-- [ ] Display mapped error message from spec §11.5 error table
-- [ ] Show rate-limit toast on 429
+- [ ] Display mapped error message from spec §11.5 error table inside `<Alert variant="destructive">`
+- [ ] Show rate-limit `toast.error()` (sonner) on 429
 
 ### 13.2 Forgot Password Page (`src/pages/ForgotPasswordPage.tsx`)
 
-- [ ] Form: email input
+- [ ] **shadcn/ui components**: `Card`, `CardHeader`, `CardContent`, `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`, `Input`, `Button`, `Alert`, `AlertDescription`
+- [ ] Form: `<Input type="email">`, `<Button type="submit">`
 - [ ] Submit: `POST /api/v1/auth/forgot-password`
-- [ ] Always display: "If that email is registered, a reset link has been sent." regardless of response
+- [ ] Always display: "If that email is registered, a reset link has been sent." in `<Alert>` regardless of response
 
 ### 13.3 Reset Password Page (`src/pages/ResetPasswordPage.tsx`)
 
+- [ ] **shadcn/ui components**: `Card`, `CardHeader`, `CardContent`, `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`, `Input`, `Button`, `Alert`, `AlertDescription`
 - [ ] Read `token` from URL query string (`useSearchParams`)
-- [ ] Form: new password + confirm password; validate they match and meet complexity rules
+- [ ] Form: `<Input type="password">` for new password + confirm; validate they match and meet complexity rules via Zod + `<FormMessage>`
 - [ ] Submit: `POST /api/v1/auth/reset-password` with `{ token, newPassword }`
-- [ ] On success: navigate to `/login?reset=success`; login page shows success banner when param present
-- [ ] On error: display "Reset link is invalid or has expired."
+- [ ] On success: navigate to `/login?reset=success`; login page shows `<Alert>` success banner when param present
+- [ ] On error: display "Reset link is invalid or has expired." in `<Alert variant="destructive">`
 
 ---
 
@@ -882,25 +923,30 @@
 
 ### 14.1 Change Password Page (`src/pages/ChangePasswordPage.tsx`)
 
-- [ ] Form: current password, new password, confirm new password
-- [ ] Client-side Zod validation: min 8 chars, uppercase, lowercase, digit, symbol
+- [ ] **shadcn/ui components**: `Card`, `CardHeader`, `CardContent`, `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`, `Input`, `Button`
+- [ ] Form: `<Input type="password">` for current, new, and confirm fields — each with `Eye`/`EyeOff` lucide icon toggle
+- [ ] Client-side Zod validation: min 8 chars, uppercase, lowercase, digit, symbol; errors shown via `<FormMessage>`
+- [ ] Submit `<Button>` shows `<Loader2 className="animate-spin">` (lucide) while pending
 - [ ] Submit: `POST /api/v1/users/me/change-password`
 - [ ] On success: update `accessToken` in `AuthContext`, set `mustChangePassword = false`, navigate to `/dashboard`
 
 ### 14.2 MFA Setup Page (`src/pages/MfaSetupPage.tsx`)
 
+- [ ] **shadcn/ui components**: `Card`, `CardHeader`, `CardContent`, `Input`, `Button`, `Separator`
 - [ ] On mount: `POST /api/v1/auth/mfa/setup` → receive `{ otpauthUri, secret }`
 - [ ] Render QR code using `<QRCodeSVG value={otpauthUri} />`
-- [ ] Show raw `secret` for manual entry with copy button
-- [ ] Form: 6-digit TOTP code → `POST /api/v1/auth/mfa/verify` to confirm
-- [ ] On success: navigate to `/dashboard` with "MFA enabled" toast
+- [ ] Show raw `secret` for manual entry with `<Button variant="outline" size="sm">` copy button using `Copy` lucide icon
+- [ ] `<Separator>` between QR section and code entry section
+- [ ] Form: `<Input>` for 6-digit TOTP code → `POST /api/v1/auth/mfa/verify` to confirm
+- [ ] On success: navigate to `/dashboard` with `toast.success("MFA enabled")` (sonner)
 
 ### 14.3 MFA Verify Page (`src/pages/MfaVerifyPage.tsx`)
 
-- [ ] 6-digit code input (auto-focus); auto-submit when 6 digits entered
+- [ ] **shadcn/ui components**: `Card`, `CardHeader`, `CardContent`, `Input`, `Button`
+- [ ] `<Input>` (auto-focus, `maxLength={6}`); auto-submit via `onChange` when 6 digits entered
 - [ ] Submit: `POST /api/v1/auth/mfa/verify`
 - [ ] On success: store token from response, navigate to `/dashboard`
-- [ ] Error: "Invalid code. Please try again."
+- [ ] Error: display "Invalid code. Please try again." via `toast.error()` (sonner)
 
 ---
 
@@ -909,12 +955,14 @@
 > **Reference:** spec §11.5 (Profile)
 
 - [ ] `src/pages/ProfilePage.tsx`
-- [ ] Display: email (read-only), displayName (editable text input), roles (badge list)
-- [ ] Save display name: `PATCH /api/v1/users/me`; show success toast on save
-- [ ] **MFA section**: status badge + conditional button:
-  - If disabled → "Enable MFA" → navigate to `/mfa/setup`
-  - If enabled → "Disable MFA" → confirmation dialog → `POST /api/v1/auth/mfa/disable` with current TOTP
-- [ ] **Password section**: expandable form reusing change-password form component
+- [ ] **shadcn/ui components**: `Card`, `CardHeader`, `CardContent`, `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent`, `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`, `Input`, `Button`, `Badge`, `Switch`, `Separator`, `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogFooter`
+- [ ] Use `<Tabs>` to organise sections: "Account", "Security" (password change), "MFA"
+- [ ] Display: email as `<Input disabled>`, displayName as editable `<Input>`; assigned roles as `<Badge>` list
+- [ ] Save display name: `PATCH /api/v1/users/me`; show `toast.success()` (sonner) on save
+- [ ] **MFA section**: `<Badge>` status + conditional `<Button>`:
+  - If disabled → `<Button>` "Enable MFA" → navigate to `/mfa/setup`
+  - If enabled → `<Button variant="destructive">` "Disable MFA" → `<Dialog>` confirmation with TOTP `<Input>` → `POST /api/v1/auth/mfa/disable`
+- [ ] **Password section**: change-password form fields reused inside the "Security" `<TabsContent>`
 
 ---
 
@@ -924,22 +972,25 @@
 
 ### 16.1 User List (`src/pages/admin/AdminUsersPage.tsx`)
 
+- [ ] **shadcn/ui components**: `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `Badge`, `Button`, `DropdownMenu`, `DropdownMenuContent`, `DropdownMenuItem`, `DropdownMenuTrigger`, `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogFooter`, `Select`, `SelectContent`, `SelectItem`, `SelectTrigger`, `SelectValue`, `Input`, `Switch`, `Skeleton`, `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`
 - [ ] Fetch: `GET /api/v1/admin/users` — response shape: `{ success, data: UserDto[], meta }` where `data` is a **flat array** (not `{ users: [] }`); each `UserDto.roles` is `string[]` (role names), not nested objects
-- [ ] Table columns: email, displayName, roles, active (badge), createdAt
-- [ ] Filters: text search (client-side or query param), role select, active toggle
-- [ ] Per-row action menu: Toggle active, Force password reset, Unlock, Delete
-  - Delete requires confirmation modal
-- [ ] "+ Create User" button → `CreateUserModal`:
-  - Fields: email (required), displayName (optional), role multi-select
+- [ ] While fetching: render `<Skeleton>` rows in place of table body
+- [ ] Table columns: email (`<Button variant="link">`), displayName, roles (`<Badge>` per role), active (`<Badge variant>` green/red), createdAt
+- [ ] Filters: text `<Input>`, role `<Select>`, active `<Select>`
+- [ ] Per-row actions via `<DropdownMenu>` (triggered by `<MoreHorizontal>` lucide icon `<Button variant="ghost" size="icon">`): Toggle active, Force password reset, Unlock, Delete
+  - Delete uses `<Dialog>` with `<Button variant="destructive">` to confirm
+- [ ] "+ Create User" `<Button>` → `<Dialog>` (`CreateUserModal`):
+  - `<Input>` for email (required), displayName (optional); `<Select>` for role (at least one required)
   - Submit: `POST /api/v1/admin/users`
-  - On success: refresh user list, show success toast
+  - On success: refresh user list, show `toast.success()` (sonner)
 
 ### 16.2 User Detail (`src/pages/admin/AdminUserDetailPage.tsx`)
 
-- [ ] Fetch: `GET /api/v1/admin/users/:id`
-- [ ] Edit form: displayName, isActive toggle → `PATCH /api/v1/admin/users/:id`
-- [ ] Role assignment: current roles with remove button (`DELETE /api/v1/admin/users/:id/roles/:roleId`); add role dropdown (`POST /api/v1/admin/users/:id/roles`)
-- [ ] Danger zone: Delete user, Force password reset, Unlock account (all with confirmation modals)
+- [ ] **shadcn/ui components**: `Card`, `CardHeader`, `CardContent`, `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`, `Input`, `Button`, `Badge`, `Switch`, `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogFooter`, `Select`, `SelectContent`, `SelectItem`, `SelectTrigger`, `SelectValue`, `Separator`, `Skeleton`
+- [ ] Fetch: `GET /api/v1/admin/users/:id`; show `<Skeleton>` while loading
+- [ ] Edit form: `<Input>` for displayName, `<Switch>` for isActive → `PATCH /api/v1/admin/users/:id`; save `<Button>` shows `<Loader2>` while pending
+- [ ] Role assignment: current roles as `<Badge>` with `<Button variant="ghost" size="icon">` remove (`<X>` lucide); `<Select>` to add from available roles → `POST /api/v1/admin/users/:id/roles`
+- [ ] Danger zone section below `<Separator>`: `<Button variant="destructive">` for Delete, Force Password Reset, Unlock — each with `<Dialog>` confirmation
 
 ---
 
@@ -949,19 +1000,21 @@
 
 ### 17.1 Role Management (`src/pages/admin/AdminRolesPage.tsx`)
 
+- [ ] **shadcn/ui components**: `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `Button`, `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogFooter`, `Checkbox`, `Badge`, `Input`, `Label`, `Skeleton`
 - [ ] Fetch: `GET /api/v1/admin/roles` — response includes `rolePermissions: Array<{ permission: { id, name } }>` on each role; use `r.rolePermissions.length` for the permission count column and `r.rolePermissions.map(rp => rp.permission.id)` to seed the permissions modal checkbox state
-- [ ] Table: name, description, permission count
-- [ ] Create role: `POST /api/v1/admin/roles` via modal (name + description)
-- [ ] Edit role: `PATCH /api/v1/admin/roles/:id`
-- [ ] Delete role: `DELETE /api/v1/admin/roles/:id` with confirmation
-- [ ] Assign permissions: checkbox modal → `POST /api/v1/admin/roles/:id/permissions` and `DELETE /api/v1/admin/roles/:id/permissions/:permId`
+- [ ] Table: name, description, permission count `<Badge>` (using `<Table>`)
+- [ ] Create role: `<Button>` → `<Dialog>` with `<Input>` for name + description → `POST /api/v1/admin/roles`
+- [ ] Edit role: `<Button variant="outline" size="sm">` per row → same `<Dialog>` form → `PATCH /api/v1/admin/roles/:id`
+- [ ] Delete role: `<Button variant="destructive" size="sm">` → `<Dialog>` confirmation → `DELETE /api/v1/admin/roles/:id`
+- [ ] Assign permissions: `<Button variant="outline" size="sm">` "Permissions" → `<Dialog>` with `<Checkbox>` list (one per permission, pre-checked if already assigned) → diff to call `POST`/`DELETE` per changed permission
 
 ### 17.2 Permission Management (`src/pages/admin/AdminPermissionsPage.tsx`)
 
-- [ ] Fetch: `GET /api/v1/admin/permissions`
-- [ ] Table: name, description
-- [ ] Create: `POST /api/v1/admin/permissions` via inline form
-- [ ] Delete: `DELETE /api/v1/admin/permissions/:id` with confirmation
+- [ ] **shadcn/ui components**: `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `Button`, `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogFooter`, `Input`, `Label`, `Skeleton`
+- [ ] Fetch: `GET /api/v1/admin/permissions`; show `<Skeleton>` rows while loading
+- [ ] Table: name, description (using `<Table>`)
+- [ ] Create: `<Button>` → `<Dialog>` with `<Input>` fields → `POST /api/v1/admin/permissions`
+- [ ] Delete: `<Button variant="destructive" size="sm">` per row → `<Dialog>` confirmation → `DELETE /api/v1/admin/permissions/:id`
 
 ---
 
@@ -984,13 +1037,14 @@
 
 ### 18.2 UX Polish
 
-- [ ] Loading spinner component for async operations (form submits, page fetches)
-- [ ] Skeleton states for tables while fetching
-- [ ] Confirmation modal component (reused across all destructive actions)
-- [ ] Toast notification component (success / error / info variants)
+- [ ] Async submit buttons: use `<Button disabled>` with `<Loader2 className="mr-2 h-4 w-4 animate-spin">` (lucide) — no custom spinner needed
+- [ ] Loading skeleton states: use shadcn `<Skeleton>` for table rows and card placeholders while fetching
+- [ ] Confirmation modals: use shadcn `<Dialog>` + `<DialogContent>` + `<DialogFooter>` with `<Button variant="destructive">` — no custom modal component needed
+- [ ] Toast notifications: use sonner `toast.success()` / `toast.error()` / `toast.info()` — `<Toaster>` must be mounted at the app root
+- [ ] Status badges: use `<Badge>` with appropriate variants — active/success states use `variant="secondary"`, error/destructive states use `variant="destructive"`, neutral states use `variant="outline"`
 - [ ] Consistent error boundary at router level for unhandled errors
-- [ ] Accessible form labels and ARIA attributes on all inputs
+- [ ] Accessible form labels and ARIA attributes: provided automatically by shadcn `<Form>` + `<FormLabel>` + `<FormControl>` — no manual `aria-*` attributes needed for form fields
 
 ---
 
-*Generated from `auth-system-spec.md` v1.1 — April 2026*
+*Generated from `auth-system-spec.md` v1.3 — April 2026*

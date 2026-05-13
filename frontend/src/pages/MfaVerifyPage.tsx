@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { AxiosError } from 'axios';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 
 export default function MfaVerifyPage() {
   const navigate = useNavigate();
@@ -36,26 +38,28 @@ export default function MfaVerifyPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="bg-white p-8 rounded-lg shadow w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Two-factor authentication</h1>
-        <p className="text-gray-600 text-sm mb-6">Enter the 6-digit code from your authenticator app.</p>
-
-        {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
-
-        <input
-          type="text"
-          inputMode="numeric"
-          maxLength={6}
-          value={code}
-          onChange={(e) => handleChange(e.target.value)}
-          disabled={submitting}
-          className="w-full border border-gray-300 rounded px-3 py-3 text-center text-2xl tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
-          autoComplete="one-time-code"
-          autoFocus
-        />
-        {submitting && <p className="text-center text-gray-500 text-sm mt-3">Verifying…</p>}
-      </div>
+    <div className="min-h-screen flex items-center justify-center bg-muted/30">
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle className="text-2xl">Two-factor authentication</CardTitle>
+          <CardDescription>Enter the 6-digit code from your authenticator app.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {error && <p className="text-destructive text-sm">{error}</p>}
+          <Input
+            type="text"
+            inputMode="numeric"
+            maxLength={6}
+            value={code}
+            onChange={(e) => handleChange((e.target as HTMLInputElement).value)}
+            disabled={submitting}
+            className="text-center text-2xl tracking-widest py-3 h-auto"
+            autoComplete="one-time-code"
+            autoFocus
+          />
+          {submitting && <p className="text-center text-muted-foreground text-sm">Verifying…</p>}
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -1,14 +1,11 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
+import { PrismaMssql } from '@prisma/adapter-mssql';
 import argon2 from 'argon2';
-import path from 'path';
 
-const dbUrl = process.env.DATABASE_URL ?? 'file:./prisma/dev.db';
-const dbPath = dbUrl.replace(/^file:/, '');
-const absolutePath = path.isAbsolute(dbPath) ? dbPath : path.resolve(process.cwd(), dbPath);
-const adapter = new PrismaBetterSqlite3({ url: absolutePath });
-const prisma = new PrismaClient({ adapter } as ConstructorParameters<typeof PrismaClient>[0]);
+const url = process.env.DATABASE_URL ?? 'sqlserver://localhost:1433;database=authdev;user=sa;password=YourStrong@Password1;trustServerCertificate=true';
+const adapter = new PrismaMssql(url);
+const prisma = new PrismaClient({ adapter });
 
 const roles = [
   { name: 'super_admin', description: 'Full system access' },

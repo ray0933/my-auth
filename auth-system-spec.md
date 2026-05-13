@@ -1,7 +1,7 @@
 # Authentication & Authorization System
 ## Requirements · Specifications · Architecture · Design
 
-**Version:** 1.2 | **Date:** April 2026
+**Version:** 1.3 | **Date:** April 2026
 
 ---
 
@@ -32,7 +32,7 @@ This document provides a complete specification for a local-database-backed Auth
 - Audit logging for all security events
 - RESTful API surface suitable for integration with any frontend or service
 
-> **Target stack:** Node.js / TypeScript + Express + SQLite (dev) / Microsoft SQL server (prod) + Prisma ORM. Adjust the database driver as needed, but keep the schema identical.
+> **Target stack:** Node.js / TypeScript + Express + Microsoft SQL Server (dev via local Docker container, prod via hosted instance) + Prisma ORM. Both environments use the `sqlserver` provider — no provider switch between dev and prod.
 
 ---
 
@@ -384,7 +384,7 @@ CREATE INDEX idx_audit_time  ON audit_logs(created_at);
 ├─────────────────────────────────────────┤
 │             Repositories               │  DB access via Prisma ORM only
 ├─────────────────────────────────────────┤
-│            Database (Prisma)            │  SQLite (dev) / Microsoft SQL server (prod)
+│            Database (Prisma)            │  SQL Server (dev container / prod instance)
 └─────────────────────────────────────────┘
 ```
 
@@ -584,7 +584,8 @@ export function requirePasswordChanged(): RequestHandler {
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `DATABASE_URL` | Yes | — | Prisma connection string |
+| `DATABASE_URL` | Yes | — | Prisma connection string — MSSQL format: `sqlserver://localhost:1433;database=authdev;user=sa;password=…;trustServerCertificate=true` |
+| `SHADOW_DATABASE_URL` | Yes (dev) | — | Separate MSSQL database used by Prisma Migrate for schema diffing; same host as `DATABASE_URL`, different `database=` name (e.g. `authdev_shadow`) |
 | `JWT_PRIVATE_KEY` | Yes | — | RS256 PEM private key (base64 or raw PEM) |
 | `JWT_PUBLIC_KEY` | Yes | — | RS256 PEM public key |
 | `JWT_ACCESS_TTL` | No | `900` | Access token TTL in seconds (15 min) |
@@ -611,8 +612,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"  // or "sqlite" for dev
-  url      = env("DATABASE_URL")
+  provider          = "sqlserver"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")  // required by Prisma Migrate for SQL Server
 }
 
 model User {
@@ -762,7 +764,7 @@ model AuditLog {
 
 ### 8.2 Integration Tests (Supertest)
 
-- Spin up the Express app with in-memory SQLite (Prisma dev mode)
+- Spin up the Express app against a dedicated test database on the local MSSQL Docker container (`authdev_test`); run `prisma migrate deploy` in test setup to apply schema
 - Test the full HTTP lifecycle for every endpoint in Section 4
 - Include negative tests: wrong credentials, expired tokens, insufficient role
 - Verify audit log entries are written after each security event
@@ -796,7 +798,8 @@ model AuditLog {
 ### 9.1 Suggested Build Order
 
 1. Scaffold project: `npm init`, `tsconfig.json`, eslint, `prisma init`
-2. Define Prisma schema (Section 6.4) and run `prisma migrate dev`
+2. Start local SQL Server container: `docker compose up -d` (see `docker-compose.yml` — image `mcr.microsoft.com/mssql/server:2022-latest`, port 1433, `ACCEPT_EULA=Y`, `SA_PASSWORD`)
+3. Define Prisma schema (Section 6.4) and run `prisma migrate dev`
 3. Implement env validation (`config/env.ts` with zod)
 4. Implement repository layer (`user`, `token`, `role`)
 5. Implement utilities (`jwt.ts`, `crypto.ts`, `validators.ts`, `tempPassword.ts`)
@@ -830,8 +833,10 @@ model AuditLog {
 | `otplib` | TOTP for MFA | `npm i otplib` |
 | `cookie-parser` | Parse HttpOnly cookies | `npm i cookie-parser` |
 | `vitest` + `supertest` | Testing | `npm i -D vitest supertest` |
+| `shadcn/ui` | Accessible component primitives (Radix UI + Tailwind) | `npx shadcn@latest init` |
+| `lucide-react` | Icon set used throughout the UI | auto-installed by shadcn |
 
-> **SQLite for development:** set `DATABASE_URL="file:./dev.db"` and `provider = "sqlite"` in `schema.prisma`. For Microsoft SQL server in production, switch the provider and update `DATABASE_URL`. Prisma handles both transparently.
+> **MSSQL for development:** Run `docker compose up -d` to start the local SQL Server container. Set `DATABASE_URL` and `SHADOW_DATABASE_URL` to point at the container (see Section 6.3). The Prisma provider is `"sqlserver"` in both dev and prod — no switch needed between environments.
 
 ---
 
@@ -968,7 +973,9 @@ interface RefreshResult extends TokenPair {
 | HTTP client | axios (with interceptors) |
 | Forms | React Hook Form + Zod |
 | State | React Context (`AuthContext`) |
-| Styling | Tailwind CSS |
+| Styling | Tailwind CSS (via `@tailwindcss/vite`) |
+| Component Library | shadcn/ui (Radix UI primitives + class-variance-authority) |
+| Icons | lucide-react (bundled with shadcn/ui) |
 | QR codes | qrcode.react |
 | Dev server port | 3000 (backend on 3001) |
 
@@ -1022,7 +1029,8 @@ interface RefreshResult extends TokenPair {
 ### 11.5 Page Specifications
 
 #### Login (`/login`)
-- **Fields**: email, password (show/hide toggle), remember-me checkbox (cosmetic — session length is controlled by server-side token TTLs)
+- **shadcn/ui components**: `Card`, `CardHeader`, `CardContent`, `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`, `Input`, `Button`, `Alert`, `AlertDescription`
+- **Fields**: email (`<Input type="email">`), password (`<Input type="password">` with `Eye`/`EyeOff` lucide icon toggle), remember-me checkbox (cosmetic — session length is controlled by server-side token TTLs)
 - **Submit**: `POST /api/v1/auth/login`
 - **Branching**: `requiresPasswordChange` → `/change-password`; MFA challenge → `/mfa/verify`
 - **Error map**:
@@ -1034,64 +1042,74 @@ interface RefreshResult extends TokenPair {
   | `429` (rate limit) | "Too many attempts. Please wait and try again." |
 
 #### Forgot Password (`/forgot-password`)
-- **Field**: email
+- **shadcn/ui components**: `Card`, `CardHeader`, `CardContent`, `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`, `Input`, `Button`, `Alert`, `AlertDescription`
+- **Field**: email (`<Input type="email">`)
 - **Submit**: `POST /api/v1/auth/forgot-password`
 - **Response**: always display "If that email is registered, a reset link has been sent." (backend returns 200 regardless)
 
 #### Reset Password (`/reset-password`)
-- **Fields**: new password, confirm password; token read from `?token=` query parameter
+- **shadcn/ui components**: `Card`, `CardHeader`, `CardContent`, `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`, `Input`, `Button`, `Alert`, `AlertDescription`
+- **Fields**: new password, confirm password (`<Input type="password">`); token read from `?token=` query parameter
 - **Submit**: `POST /api/v1/auth/reset-password`
-- **On success**: redirect to `/login?reset=success`; show a success banner on the login page
+- **On success**: redirect to `/login?reset=success`; show a success `<Alert>` on the login page
 - **Errors**: `INVALID_TOKEN` or `TOKEN_EXPIRED` → "This reset link is invalid or has expired. Request a new one."
 
 #### Forced Change Password (`/change-password`)
-- **Fields**: current password, new password, confirm new password
+- **shadcn/ui components**: `Card`, `CardHeader`, `CardContent`, `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`, `Input`, `Button`
+- **Fields**: current password, new password, confirm new password (`<Input type="password">` with show/hide toggle)
 - **Client-side validation** (mirrors backend Zod schema): min 8 chars, at least one uppercase, lowercase, digit, and symbol
 - **Submit**: `POST /api/v1/users/me/change-password`
 - **On success**: store new `accessToken` in `AuthContext`, redirect to `/dashboard`
 
 #### MFA Verify (`/mfa/verify`)
-- **Field**: 6-digit TOTP code (auto-focus, auto-submit on 6th digit)
+- **shadcn/ui components**: `Card`, `CardHeader`, `CardContent`, `Input`, `Button`
+- **Field**: 6-digit TOTP code `<Input>` (auto-focus, auto-submit on 6th digit)
 - **Submit**: `POST /api/v1/auth/mfa/verify`
 - **On success**: finalise login, redirect to `/dashboard`
 
 #### MFA Setup (`/mfa/setup`)
+- **shadcn/ui components**: `Card`, `CardHeader`, `CardContent`, `Input`, `Button`, `Separator`
 - **Step 1**: call `POST /api/v1/auth/mfa/setup` → receive `otpauthUri` + `secret`
-- Display QR code (via `qrcode.react`) and the raw secret for manual entry
-- **Step 2**: user enters TOTP code → `POST /api/v1/auth/mfa/verify` to confirm and enable
-- **Disable**: button on Profile page → `POST /api/v1/auth/mfa/disable` with current TOTP code; requires confirmation dialog
+- Display QR code (via `qrcode.react`) and the raw secret for manual entry with a copy `<Button variant="outline">`
+- **Step 2**: user enters TOTP code `<Input>` → `POST /api/v1/auth/mfa/verify` to confirm and enable
+- **Disable**: `<Button variant="destructive">` on Profile page → `POST /api/v1/auth/mfa/disable` with current TOTP code; requires `<Dialog>` confirmation
 
 #### Profile (`/profile`)
-- Display: email (read-only), `displayName` (editable), assigned roles (read-only badges)
+- **shadcn/ui components**: `Card`, `CardHeader`, `CardContent`, `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent`, `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`, `Input`, `Button`, `Badge`, `Switch`, `Separator`, `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogFooter`
+- Display: email (read-only `<Input disabled>`), `displayName` (editable `<Input>`), assigned roles (read-only `<Badge>` list)
 - **Save display name**: `PATCH /api/v1/users/me`
-- **MFA section**: status badge (Enabled/Disabled) + button to launch Setup or Disable flow
-- **Password section**: inline form reusing change-password logic (current + new + confirm)
+- **MFA section**: `<Badge>` status (Enabled/Disabled) + `<Button>` to launch Setup or Disable flow; Disable uses `<Dialog>` confirmation
+- **Password section**: collapsible `<Tabs>` section reusing change-password form fields
 
 #### Admin — User Management (`/admin/users`)
-- **Table columns**: email, displayName, roles, active, createdAt
-- **Filters**: text search (email/name), role dropdown, active/inactive radio
-- **Per-row actions**:
+- **shadcn/ui components**: `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `Badge`, `Button`, `DropdownMenu`, `DropdownMenuContent`, `DropdownMenuItem`, `DropdownMenuTrigger`, `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogFooter`, `Select`, `SelectContent`, `SelectItem`, `SelectTrigger`, `SelectValue`, `Input`, `Switch`, `Skeleton`
+- **Table columns**: email, displayName, roles (`<Badge>` per role), active (`<Badge variant>`), createdAt
+- **Filters**: text search `<Input>`, role `<Select>`, active/inactive `<Select>`
+- **Per-row actions** (via `<DropdownMenu>`):
   | Action | Endpoint |
   |---|---|
   | Toggle active | `PATCH /api/v1/admin/users/:id` `{ isActive }` |
   | Force password reset | `POST /api/v1/admin/users/:id/force-password-reset` |
   | Unlock | `POST /api/v1/admin/users/:id/unlock` |
-  | Delete | `DELETE /api/v1/admin/users/:id` (confirmation modal required) |
-- **Create User** (`+` button → modal): email, displayName (optional), role multi-select → `POST /api/v1/admin/users`
+  | Delete | `DELETE /api/v1/admin/users/:id` — `<Dialog>` confirmation with `<Button variant="destructive">` |
+- **Create User** (`<Button>` → `<Dialog>`): email `<Input>`, displayName `<Input>` (optional), role multi-`<Select>` → `POST /api/v1/admin/users`
 
 #### Admin — User Detail (`/admin/users/:id`)
-- Edit `displayName`, toggle `isActive`
-- **Role management**: list current roles with remove buttons; dropdown to add from available roles
-- **Danger zone**: delete user, force password reset, unlock account (all with confirmation modals)
+- **shadcn/ui components**: `Card`, `CardHeader`, `CardContent`, `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`, `Input`, `Button`, `Badge`, `Switch`, `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogFooter`, `Select`, `SelectContent`, `SelectItem`, `SelectTrigger`, `SelectValue`, `Separator`
+- Edit `displayName` (`<Input>`), toggle `isActive` (`<Switch>`)
+- **Role management**: list current roles as `<Badge>` with remove `<Button variant="ghost" size="sm">`; `<Select>` to add from available roles
+- **Danger zone**: `<Button variant="destructive">` for delete, force password reset, unlock — all guarded by `<Dialog>` confirmation
 
 #### Admin — Role Management (`/admin/roles`)
-- Table: name, description, permission count
-- Create / edit / delete roles
-- Assign permissions: checkbox list in a modal → `POST /DELETE /api/v1/admin/roles/:id/permissions`
+- **shadcn/ui components**: `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `Button`, `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogFooter`, `Checkbox`, `Badge`, `Input`, `Label`
+- Table: name, description, permission count (using `<Table>`)
+- Create / edit roles via `<Dialog>` with `<Input>` fields; delete with `<Button variant="destructive">` + confirmation `<Dialog>`
+- Assign permissions: `<Checkbox>` list inside a `<Dialog>` modal → `POST`/`DELETE /api/v1/admin/roles/:id/permissions`
 
 #### Admin — Permission Management (`/admin/permissions`)
-- Table: name, description
-- Create (`POST /api/v1/admin/permissions`) / delete (`DELETE /api/v1/admin/permissions/:id`)
+- **shadcn/ui components**: `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `Button`, `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogFooter`, `Input`, `Label`
+- Table: name, description (using `<Table>`)
+- Create via inline `<Dialog>` form (`POST /api/v1/admin/permissions`); delete with `<Button variant="destructive">` + confirmation `<Dialog>` (`DELETE /api/v1/admin/permissions/:id`)
 
 ---
 

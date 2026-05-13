@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "sqlserver"
 }
 
 model User {
@@ -17,10 +17,10 @@ model User {
   failedAttempts     Int       @default(0)
   mfaSecret          String?
   myBossId           String?
-  myBoss             User?     @relation("UserBoss", fields: [myBossId], references: [id])
+  myBoss             User?     @relation("UserBoss", fields: [myBossId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   subordinates       User[]    @relation("UserBoss")
   createdById        String?
-  createdByUser      User?     @relation("UserCreatedBy", fields: [createdById], references: [id])
+  createdByUser      User?     @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
   createdUsers       User[]    @relation("UserCreatedBy")
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt

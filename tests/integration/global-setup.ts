@@ -1,12 +1,14 @@
 import { execSync } from 'child_process';
-import path from 'path';
+import 'dotenv/config';
+
+const TEST_DATABASE_URL =
+  process.env.TEST_DATABASE_URL ??
+  'sqlserver://localhost:1433;database=authdev_test;user=sa;password=YourStrong@Password1;trustServerCertificate=true';
 
 export function setup() {
-  const dbPath = path.resolve(process.cwd(), 'prisma/test.db');
-  process.env.DATABASE_URL = `file:${dbPath}`;
   execSync('npx prisma migrate deploy', {
     stdio: 'pipe',
-    env: { ...process.env, DATABASE_URL: `file:${dbPath}` },
+    env: { ...process.env, DATABASE_URL: TEST_DATABASE_URL },
   });
 }
 
