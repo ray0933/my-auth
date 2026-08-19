@@ -44,7 +44,7 @@ export default function AdminUsersPage() {
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [createData, setCreateData] = useState({ email: '', displayName: '', roleId: '' });
+  const [createData, setCreateData] = useState({ email: '', displayName: '', roleName: '' });
   const [createError, setCreateError] = useState('');
   const [creating, setCreating] = useState(false);
 
@@ -119,10 +119,10 @@ export default function AdminUsersPage() {
       await api.post('/admin/users', {
         email: createData.email,
         displayName: createData.displayName || undefined,
-        roles: createData.roleId ? [createData.roleId] : [],
+        roles: createData.roleName ? [createData.roleName] : [],
       });
       setShowCreate(false);
-      setCreateData({ email: '', displayName: '', roleId: '' });
+      setCreateData({ email: '', displayName: '', roleName: '' });
       load();
       toast.success('User created.');
     } catch (err) {
@@ -273,13 +273,13 @@ export default function AdminUsersPage() {
             </div>
             <div className="space-y-1">
               <Label>Role</Label>
-              <Select value={createData.roleId} onValueChange={(value) => setCreateData((d) => ({ ...d, roleId: value as string }))}>
+              <Select value={createData.roleName} onValueChange={(value) => setCreateData((d) => ({ ...d, roleName: value as string }))}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select role…" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">No role</SelectItem>
-                  {roles.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+                  {roles.map((r) => <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
