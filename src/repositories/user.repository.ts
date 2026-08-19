@@ -22,8 +22,8 @@ export async function create(data: CreateUserData): Promise<User> {
   const { roles, ...userData } = data;
   return prisma.$transaction(async (tx) => {
     const user = await tx.user.create({ data: userData });
-    for (const roleName of roles) {
-      const role = await tx.role.findUnique({ where: { name: roleName } });
+    for (const roleId of roles) {
+      const role = await tx.role.findUnique({ where: { id: roleId } });
       if (role) {
         await tx.userRole.create({
           data: { userId: user.id, roleId: role.id, grantedBy: data.createdById },

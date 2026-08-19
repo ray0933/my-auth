@@ -26,7 +26,7 @@ export const loginSchema = z.object({
 export const adminCreateUserSchema = z.object({
   email: z.string().email(),
   displayName: z.string().optional(),
-  roles: z.array(z.string()).min(1),
+  roles: z.array(z.string()).default([]),
 });
 
 export const changePasswordSchema = z.object({
