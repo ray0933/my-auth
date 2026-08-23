@@ -11,9 +11,10 @@ router.use(requireAuth);
 router.use(requirePasswordChanged());
 
 // sales_rep gets read access (service layer scopes it to their own records via
-// salesRepCode); accounting is read-only here too — only accounting_supervisor/
-// admin/super_admin can create/edit OrderTracking or its InvoicePlan lines.
-const READ_ROLES = ['sales_rep', 'accounting', 'accounting_supervisor', 'admin', 'super_admin'];
+// salesRepCode); accounting/supervisor are read-only here too — only
+// accounting_supervisor/admin/super_admin can create/edit OrderTracking or its
+// InvoicePlan lines.
+const READ_ROLES = ['sales_rep', 'accounting', 'supervisor', 'accounting_supervisor', 'admin', 'super_admin'];
 const FULL_WRITE_ROLES = ['accounting_supervisor', 'admin', 'super_admin'];
 
 router.post('/', requireRole(...FULL_WRITE_ROLES), orderTrackingController.createOrderTracking);

@@ -9,7 +9,7 @@ const router = Router();
 router.use(requireAuth);
 router.use(requirePasswordChanged());
 
-const READ_ROLES = ['sales_rep', 'accounting', 'accounting_supervisor', 'admin', 'super_admin'];
+const READ_ROLES = ['sales_rep', 'accounting', 'supervisor', 'accounting_supervisor', 'admin', 'super_admin'];
 const MANAGE_ROLES = ['accounting', 'accounting_supervisor', 'admin', 'super_admin'];
 
 router.post('/', requireRole(...MANAGE_ROLES), invoiceController.issueInvoice);

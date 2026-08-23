@@ -254,6 +254,84 @@ describe('invoicePlanService.updateInvoicePlan', () => {
       )
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
+
+  it('lets a supervisor edit notes on a plan line belonging to a different sales rep (unscoped)', async () => {
+    vi.mocked(invoicePlanRepo.findByIdWithOrderTracking).mockResolvedValue({
+      ...mockPlan,
+      status: 'invoiced',
+      orderTracking: { id: 'ot-2', salesRepCode: 'S999' } as any,
+    });
+    vi.mocked(invoicePlanRepo.update).mockResolvedValue(mockPlan);
+
+    await invoicePlanService.updateInvoicePlan(
+      'plan-1',
+      { notes: 'reviewed' },
+      { userId: 'u4', roles: ['supervisor'], employeeCode: null },
+      'u4'
+    );
+
+    expect(invoicePlanRepo.update).toHaveBeenCalledWith('plan-1', expect.objectContaining({ notes: 'reviewed' }));
+  });
+
+  it('lets a supervisor edit estimatedCompletionDate on any plan line while pending', async () => {
+    vi.mocked(invoicePlanRepo.findByIdWithOrderTracking).mockResolvedValue({
+      ...mockPlan,
+      orderTracking: { id: 'ot-2', salesRepCode: 'S999' } as any,
+    });
+    vi.mocked(invoicePlanRepo.update).mockResolvedValue(mockPlan);
+
+    await invoicePlanService.updateInvoicePlan(
+      'plan-1',
+      { estimatedCompletionDate: new Date('2026-09-15') },
+      { userId: 'u4', roles: ['supervisor'], employeeCode: null },
+      'u4'
+    );
+
+    const updateArg = vi.mocked(invoicePlanRepo.update).mock.calls[0]![1] as any;
+    expect(updateArg.estimatedCompletionMonthStr).toBe('115-09');
+  });
+
+  it('rejects a supervisor editing estimatedCompletionDate once the plan is invoiced (409)', async () => {
+    vi.mocked(invoicePlanRepo.findByIdWithOrderTracking).mockResolvedValue({
+      ...mockPlan,
+      status: 'invoiced',
+      orderTracking: { id: 'ot-2', salesRepCode: 'S999' } as any,
+    });
+
+    await expect(
+      invoicePlanService.updateInvoicePlan(
+        'plan-1',
+        { estimatedCompletionDate: new Date('2026-09-15') },
+        { userId: 'u4', roles: ['supervisor'], employeeCode: null },
+        'u4'
+      )
+    ).rejects.toMatchObject({ code: 'INVOICE_PLAN_NOT_PENDING' });
+  });
+
+  it('rejects a supervisor editing plannedMonth or plannedAmount (403)', async () => {
+    vi.mocked(invoicePlanRepo.findByIdWithOrderTracking).mockResolvedValue({
+      ...mockPlan,
+      orderTracking: { id: 'ot-2', salesRepCode: 'S999' } as any,
+    });
+
+    await expect(
+      invoicePlanService.updateInvoicePlan(
+        'plan-1',
+        { plannedAmount: 500 },
+        { userId: 'u4', roles: ['supervisor'], employeeCode: null },
+        'u4'
+      )
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+    await expect(
+      invoicePlanService.updateInvoicePlan(
+        'plan-1',
+        { plannedMonth: new Date('2026-11-01') },
+        { userId: 'u4', roles: ['supervisor'], employeeCode: null },
+        'u4'
+      )
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
 });
 
 describe('invoicePlanService.deleteInvoicePlan', () => {

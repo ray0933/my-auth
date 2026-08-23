@@ -13,13 +13,15 @@ let accountingSupervisorRoleId: string;
 let accountingRoleId: string;
 let salesRepRoleId: string;
 let userRoleId: string;
+let supervisorRoleId: string;
 
 beforeAll(async () => {
-  const { accountingSupervisorRole, accountingRole, salesRepRole, userRole } = await setupTestDb(prisma);
+  const { accountingSupervisorRole, accountingRole, salesRepRole, userRole, supervisorRole } = await setupTestDb(prisma);
   accountingSupervisorRoleId = accountingSupervisorRole.id;
   accountingRoleId = accountingRole.id;
   salesRepRoleId = salesRepRole.id;
   userRoleId = userRole.id;
+  supervisorRoleId = supervisorRole.id;
 });
 
 afterAll(async () => {
@@ -209,6 +211,42 @@ describe('Invoice API', () => {
       .set('Authorization', `Bearer ${repToken}`)
       .send({ notes: 'trying to sneak an edit' });
     expect(res.status).toBe(403);
+  });
+
+  it('lets a supervisor read invoices but blocks write/issue/void/delete (403)', async () => {
+    await createTestUser(prisma, { email: 'inv-sup9@test.com', password: 'ValidPass1!', roleId: accountingSupervisorRoleId });
+    const supToken = await getToken('inv-sup9@test.com', 'ValidPass1!');
+    const planId = await setupPendingPlan(supToken, 'ORD-3010', '100');
+    const issueRes = await issueInvoiceReq(supToken, planId, 'INV-TEST-3010');
+    const invoiceId = issueRes.body.data.id;
+
+    await createTestUser(prisma, { email: 'inv-visor1@test.com', password: 'ValidPass1!', roleId: supervisorRoleId });
+    const visorToken = await getToken('inv-visor1@test.com', 'ValidPass1!');
+
+    const listRes = await request(app).get('/api/v1/invoices').set('Authorization', `Bearer ${visorToken}`);
+    expect(listRes.status).toBe(200);
+    expect(listRes.body.data.some((inv: { id: string }) => inv.id === invoiceId)).toBe(true);
+
+    const getRes = await request(app).get(`/api/v1/invoices/${invoiceId}`).set('Authorization', `Bearer ${visorToken}`);
+    expect(getRes.status).toBe(200);
+
+    const patchRes = await request(app)
+      .patch(`/api/v1/invoices/${invoiceId}`)
+      .set('Authorization', `Bearer ${visorToken}`)
+      .send({ notes: 'trying to sneak an edit' });
+    expect(patchRes.status).toBe(403);
+
+    const voidRes = await request(app)
+      .post(`/api/v1/invoices/${invoiceId}/void`)
+      .set('Authorization', `Bearer ${visorToken}`)
+      .send({ voidReason: 'nope' });
+    expect(voidRes.status).toBe(403);
+
+    const deleteRes = await request(app).delete(`/api/v1/invoices/${invoiceId}`).set('Authorization', `Bearer ${visorToken}`);
+    expect(deleteRes.status).toBe(403);
+
+    const issueBlockedRes = await issueInvoiceReq(visorToken, planId, 'INV-TEST-3010-B');
+    expect(issueBlockedRes.status).toBe(403);
   });
 
   it('returns 403 FORBIDDEN for the plain user role', async () => {

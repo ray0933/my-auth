@@ -93,7 +93,11 @@ export default function OrderTrackingDetailPage() {
 
   const canManageOrderTracking = hasAnyRole(user?.roles, ORDER_TRACKING_FULL_WRITE_ROLES);
   const canManageInvoices = hasAnyRole(user?.roles, INVOICE_MANAGE_ROLES);
-  const isSalesRepOnly = (user?.roles ?? []).includes('sales_rep') && !canManageOrderTracking;
+  // sales_rep (scoped to their own OrderTracking) and supervisor (unscoped, any
+  // OrderTracking) can both only edit an InvoicePlan's notes/estimatedCompletionDate —
+  // never the full field set that canManageOrderTracking roles get.
+  const canEditLimitedFieldsOnly =
+    ((user?.roles ?? []).includes('sales_rep') || (user?.roles ?? []).includes('supervisor')) && !canManageOrderTracking;
 
   const [orderTracking, setOrderTracking] = useState<OrderTrackingDetail | null>(null);
   const [plans, setPlans] = useState<InvoicePlanRow[]>([]);
@@ -392,7 +396,7 @@ export default function OrderTrackingDetailPage() {
                   <TableRow key={p.id}>
                     <TableCell>{p.plannedMonthStr}</TableCell>
                     <TableCell className="min-w-32">
-                      {isSalesRepOnly && p.status === 'pending' ? (
+                      {canEditLimitedFieldsOnly && p.status === 'pending' ? (
                         <div className="flex gap-2">
                           <Input
                             type="text"
@@ -410,7 +414,7 @@ export default function OrderTrackingDetailPage() {
                     <TableCell>{formatCurrency(p.plannedAmount)}</TableCell>
                     <TableCell><Badge variant={p.status === 'pending' ? 'secondary' : 'outline'}>{invoicePlanStatusLabel(p.status)}</Badge></TableCell>
                     <TableCell className="min-w-48">
-                      {isSalesRepOnly ? (
+                      {canEditLimitedFieldsOnly ? (
                         <div className="flex gap-2">
                           <Textarea
                             className="min-h-8"

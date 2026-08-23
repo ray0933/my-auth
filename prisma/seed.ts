@@ -14,6 +14,7 @@ const roles = [
   { name: 'sales_rep', description: '業務，僅能查看與標註自己名下的訂單追蹤資料' },
   { name: 'accounting', description: '會計，可完整管理發票（含刪除），並唯讀瀏覽訂單追蹤與發票計畫' },
   { name: 'accounting_supervisor', description: '會計主管，可完整管理所有訂單追蹤、發票計畫與發票' },
+  { name: 'supervisor', description: '主管，可唯讀瀏覽所有訂單追蹤、發票計畫與發票，並可修改任一發票計畫的備註與預估完成月份' },
 ];
 
 const permissions = [
@@ -35,6 +36,7 @@ const permissions = [
   { name: 'invoice_plans:read_own', description: 'Read own (salesRepCode-scoped) invoice plan lines' },
   { name: 'invoice_plans:write', description: 'Edit pending invoice plan lines (any field)' },
   { name: 'invoice_plans:write_own_notes', description: 'Edit the notes/estimatedCompletionDate fields of own invoice plan lines' },
+  { name: 'invoice_plans:write_limited', description: 'Edit the notes/estimatedCompletionDate fields of any invoice plan line (not scoped to own)' },
   { name: 'invoice_plans:delete', description: 'Delete pending invoice plan lines' },
   { name: 'invoices:create', description: 'Issue an invoice from a pending invoice plan line' },
   { name: 'invoices:read', description: 'Read all invoices' },
@@ -64,6 +66,7 @@ const rolePermissions: Record<string, string[]> = {
     'invoice_plans:create', 'invoice_plans:read', 'invoice_plans:write', 'invoice_plans:delete',
     'invoices:create', 'invoices:read', 'invoices:void', 'invoices:delete',
   ],
+  supervisor: ['order_tracking:read', 'invoice_plans:read', 'invoice_plans:write_limited', 'invoices:read'],
 };
 
 async function main() {

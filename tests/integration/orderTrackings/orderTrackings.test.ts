@@ -12,12 +12,14 @@ const prisma = createTestPrisma();
 let accountingSupervisorRoleId: string;
 let salesRepRoleId: string;
 let userRoleId: string;
+let supervisorRoleId: string;
 
 beforeAll(async () => {
-  const { accountingSupervisorRole, salesRepRole, userRole } = await setupTestDb(prisma);
+  const { accountingSupervisorRole, salesRepRole, userRole, supervisorRole } = await setupTestDb(prisma);
   accountingSupervisorRoleId = accountingSupervisorRole.id;
   salesRepRoleId = salesRepRole.id;
   userRoleId = userRole.id;
+  supervisorRoleId = supervisorRole.id;
 });
 
 afterAll(async () => {
@@ -145,6 +147,34 @@ describe('OrderTracking API', () => {
     expect(syncRes.status).toBe(200);
     expect(syncRes.body.data.customerShortName).toBe('UPDATED');
     expect(syncRes.body.data.notes).toBe('call back next week'); // untouched by sync
+  });
+
+  it('lets a supervisor read OrderTrackings across different sales reps (unscoped, read-only)', async () => {
+    await createTestUser(prisma, { email: 'ot-sup6@test.com', password: 'ValidPass1!', roleId: accountingSupervisorRoleId });
+    const supToken = await getToken('ot-sup6@test.com', 'ValidPass1!');
+
+    vi.mocked(erpOrderRepo.findOrderSnapshotByNumber).mockResolvedValue({ ...baseSnapshot, orderNumber: 'ORD-VISOR-A', salesRepCode: 'S030' });
+    await request(app).post('/api/v1/order-trackings').set('Authorization', `Bearer ${supToken}`).send({ orderNumber: 'ORD-VISOR-A', orderType: 'general' });
+
+    vi.mocked(erpOrderRepo.findOrderSnapshotByNumber).mockResolvedValue({ ...baseSnapshot, orderNumber: 'ORD-VISOR-B', salesRepCode: 'S040' });
+    const otherRes = await request(app).post('/api/v1/order-trackings').set('Authorization', `Bearer ${supToken}`).send({ orderNumber: 'ORD-VISOR-B', orderType: 'general' });
+
+    await createTestUser(prisma, { email: 'ot-visor1@test.com', password: 'ValidPass1!', roleId: supervisorRoleId });
+    const visorToken = await getToken('ot-visor1@test.com', 'ValidPass1!');
+
+    const listRes = await request(app).get('/api/v1/order-trackings').set('Authorization', `Bearer ${visorToken}`);
+    expect(listRes.status).toBe(200);
+    const salesRepCodes = listRes.body.data.map((o: { salesRepCode: string }) => o.salesRepCode);
+    expect(salesRepCodes).toEqual(expect.arrayContaining(['S030', 'S040']));
+
+    const getRes = await request(app).get(`/api/v1/order-trackings/${otherRes.body.data.id}`).set('Authorization', `Bearer ${visorToken}`);
+    expect(getRes.status).toBe(200);
+
+    const patchRes = await request(app)
+      .patch(`/api/v1/order-trackings/${otherRes.body.data.id}`)
+      .set('Authorization', `Bearer ${visorToken}`)
+      .send({ notes: 'not allowed' });
+    expect(patchRes.status).toBe(403);
   });
 
   it('returns 403 FORBIDDEN for the plain user role', async () => {

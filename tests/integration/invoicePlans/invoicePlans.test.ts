@@ -12,12 +12,14 @@ const prisma = createTestPrisma();
 let accountingSupervisorRoleId: string;
 let salesRepRoleId: string;
 let accountingRoleId: string;
+let supervisorRoleId: string;
 
 beforeAll(async () => {
-  const { accountingSupervisorRole, salesRepRole, accountingRole } = await setupTestDb(prisma);
+  const { accountingSupervisorRole, salesRepRole, accountingRole, supervisorRole } = await setupTestDb(prisma);
   accountingSupervisorRoleId = accountingSupervisorRole.id;
   salesRepRoleId = salesRepRole.id;
   accountingRoleId = accountingRole.id;
+  supervisorRoleId = supervisorRole.id;
 });
 
 afterAll(async () => {
@@ -217,5 +219,89 @@ describe('InvoicePlan API', () => {
 
     const deleteRes = await request(app).delete(`/api/v1/invoice-plans/${secondPlanId}`).set('Authorization', `Bearer ${supToken}`);
     expect(deleteRes.status).toBe(204);
+  });
+
+  it('lets a supervisor read and edit notes/estimatedCompletionDate on any plan line, unscoped, and blocks other fields (403)', async () => {
+    await createTestUser(prisma, { email: 'ip-sup7@test.com', password: 'ValidPass1!', roleId: accountingSupervisorRoleId });
+    const supToken = await getToken('ip-sup7@test.com', 'ValidPass1!');
+    const orderTrackingId = await createOrderTracking(supToken, 'ORD-2007', 'S070');
+
+    const createRes = await request(app)
+      .post(`/api/v1/order-trackings/${orderTrackingId}/invoice-plans`)
+      .set('Authorization', `Bearer ${supToken}`)
+      .send({ plannedMonth: '2026-09-01', estimatedCompletionDate: '2026-09-01', plannedAmount: '500' });
+    const planId = createRes.body.data.id;
+
+    // Different employeeCode than the plan's salesRepCode — proves supervisor is unscoped.
+    await createTestUser(prisma, { email: 'ip-visor1@test.com', password: 'ValidPass1!', roleId: supervisorRoleId });
+    const visorToken = await getToken('ip-visor1@test.com', 'ValidPass1!');
+
+    const listRes = await request(app).get('/api/v1/invoice-plans').set('Authorization', `Bearer ${visorToken}`);
+    expect(listRes.status).toBe(200);
+    expect(listRes.body.data.some((p: { id: string }) => p.id === planId)).toBe(true);
+
+    const notesRes = await request(app)
+      .patch(`/api/v1/invoice-plans/${planId}`)
+      .set('Authorization', `Bearer ${visorToken}`)
+      .send({ notes: 'reviewed by supervisor' });
+    expect(notesRes.status).toBe(200);
+    expect(notesRes.body.data.notes).toBe('reviewed by supervisor');
+
+    const completionRes = await request(app)
+      .patch(`/api/v1/invoice-plans/${planId}`)
+      .set('Authorization', `Bearer ${visorToken}`)
+      .send({ estimatedCompletionDate: '2026-11-01' });
+    expect(completionRes.status).toBe(200);
+    expect(completionRes.body.data.estimatedCompletionMonthStr).toBe('115-11');
+
+    const forbiddenAmountRes = await request(app)
+      .patch(`/api/v1/invoice-plans/${planId}`)
+      .set('Authorization', `Bearer ${visorToken}`)
+      .send({ plannedAmount: '999' });
+    expect(forbiddenAmountRes.status).toBe(403);
+
+    const createBlockedRes = await request(app)
+      .post(`/api/v1/order-trackings/${orderTrackingId}/invoice-plans`)
+      .set('Authorization', `Bearer ${visorToken}`)
+      .send({ plannedMonth: '2026-11-01', estimatedCompletionDate: '2026-11-01', plannedAmount: '1' });
+    expect(createBlockedRes.status).toBe(403);
+
+    const deleteBlockedRes = await request(app).delete(`/api/v1/invoice-plans/${planId}`).set('Authorization', `Bearer ${visorToken}`);
+    expect(deleteBlockedRes.status).toBe(403);
+  });
+
+  it('locks estimatedCompletionDate for a supervisor once the plan is invoiced (409)', async () => {
+    await createTestUser(prisma, { email: 'ip-sup8@test.com', password: 'ValidPass1!', roleId: accountingSupervisorRoleId });
+    const supToken = await getToken('ip-sup8@test.com', 'ValidPass1!');
+    const orderTrackingId = await createOrderTracking(supToken, 'ORD-2008', 'S080');
+
+    const createRes = await request(app)
+      .post(`/api/v1/order-trackings/${orderTrackingId}/invoice-plans`)
+      .set('Authorization', `Bearer ${supToken}`)
+      .send({ plannedMonth: '2026-09-01', estimatedCompletionDate: '2026-09-01', plannedAmount: '500' });
+    const planId = createRes.body.data.id;
+
+    const issueRes = await request(app)
+      .post('/api/v1/invoices')
+      .set('Authorization', `Bearer ${supToken}`)
+      .send({ invoicePlanId: planId, invoiceNumber: 'INV-TEST-2008', invoiceDate: '2026-08-22' });
+    expect(issueRes.status).toBe(201);
+
+    await createTestUser(prisma, { email: 'ip-visor2@test.com', password: 'ValidPass1!', roleId: supervisorRoleId });
+    const visorToken = await getToken('ip-visor2@test.com', 'ValidPass1!');
+
+    const visorRes = await request(app)
+      .patch(`/api/v1/invoice-plans/${planId}`)
+      .set('Authorization', `Bearer ${visorToken}`)
+      .send({ estimatedCompletionDate: '2026-11-01' });
+    expect(visorRes.status).toBe(409);
+    expect(visorRes.body.error.code).toBe('INVOICE_PLAN_NOT_PENDING');
+
+    // notes stays editable regardless
+    const notesRes = await request(app)
+      .patch(`/api/v1/invoice-plans/${planId}`)
+      .set('Authorization', `Bearer ${visorToken}`)
+      .send({ notes: 'still fine to annotate' });
+    expect(notesRes.status).toBe(200);
   });
 });

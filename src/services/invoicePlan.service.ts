@@ -73,11 +73,13 @@ export async function listInvoicePlans(
  * status, for anyone who otherwise has some write access to the line. */
 const LOCKED_ONCE_INVOICED_FIELDS = ['plannedMonth', 'plannedAmount', 'estimatedCompletionDate'] as const;
 
-/** Fields a sales_rep may edit on their own plan lines: their read-only scope over
- * InvoicePlan carves out these two as editable (notes for annotation, plus the
- * operational completion-date estimate) — everything else stays out of reach.
- * estimatedCompletionDate is still subject to the pending-only lock above. */
-const SALES_REP_EDITABLE_FIELDS = ['notes', 'estimatedCompletionDate'] as const;
+/** Fields a caller with only limited write access may touch — notes for
+ * annotation, plus the operational completion-date estimate. Applies to sales_rep
+ * (scoped to their own OrderTracking's plan lines) and supervisor (unscoped — any
+ * plan line). estimatedCompletionDate is still subject to the pending-only lock
+ * above; plannedMonth/plannedAmount are out of reach for these roles regardless
+ * of status. */
+const LIMITED_EDITABLE_FIELDS = ['notes', 'estimatedCompletionDate'] as const;
 
 export async function updateInvoicePlan(
   id: string,
@@ -89,13 +91,18 @@ export async function updateInvoicePlan(
   if (!existing) throw new AppError('NOT_FOUND', 404);
 
   const submittedFields = Object.keys(dto);
+  const touchesOnlyLimitedFields = submittedFields.every((f) => (LIMITED_EDITABLE_FIELDS as readonly string[]).includes(f));
 
   if (isScopedToOwnRecords(caller.roles)) {
+    // sales_rep: limited fields, only on their own OrderTracking's plan lines.
     if (existing.orderTracking.salesRepCode !== caller.employeeCode) throw new AppError('NOT_FOUND', 404);
-    if (submittedFields.some((f) => !(SALES_REP_EDITABLE_FIELDS as readonly string[]).includes(f))) {
-      throw new AppError('FORBIDDEN', 403);
-    }
-  } else if (!hasFullWriteAccess(caller.roles)) {
+    if (!touchesOnlyLimitedFields) throw new AppError('FORBIDDEN', 403);
+  } else if (hasFullWriteAccess(caller.roles)) {
+    // accounting_supervisor/admin/super_admin: any field, subject to the status lock below.
+  } else if (caller.roles.includes('supervisor')) {
+    // supervisor: limited fields, but on any plan line (not scoped to own).
+    if (!touchesOnlyLimitedFields) throw new AppError('FORBIDDEN', 403);
+  } else {
     // e.g. accounting: read-only on InvoicePlan, no write permission at all.
     throw new AppError('FORBIDDEN', 403);
   }

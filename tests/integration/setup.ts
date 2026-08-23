@@ -23,10 +23,10 @@ export async function setupTestDb(prisma: PrismaClient) {
   await prisma.role.deleteMany();
   await prisma.permission.deleteMany();
 
-  const roles = ['super_admin', 'admin', 'user', 'sales_rep', 'accounting', 'accounting_supervisor'].map((name) =>
-    prisma.role.create({ data: { name, description: name } })
+  const roles = ['super_admin', 'admin', 'user', 'sales_rep', 'accounting', 'accounting_supervisor', 'supervisor'].map(
+    (name) => prisma.role.create({ data: { name, description: name } })
   );
-  const [superAdminRole, adminRole, userRole, salesRepRole, accountingRole, accountingSupervisorRole] =
+  const [superAdminRole, adminRole, userRole, salesRepRole, accountingRole, accountingSupervisorRole, supervisorRole] =
     await Promise.all(roles);
 
   const perms = [
@@ -34,7 +34,7 @@ export async function setupTestDb(prisma: PrismaClient) {
     'roles:read', 'roles:write', 'permissions:write', 'audit:read',
     'order_tracking:create', 'order_tracking:read', 'order_tracking:read_own', 'order_tracking:write',
     'invoice_plans:create', 'invoice_plans:read', 'invoice_plans:read_own', 'invoice_plans:write',
-    'invoice_plans:write_own_notes', 'invoice_plans:delete',
+    'invoice_plans:write_own_notes', 'invoice_plans:write_limited', 'invoice_plans:delete',
     'invoices:create', 'invoices:read', 'invoices:read_own', 'invoices:void', 'invoices:delete',
   ].map((name) => prisma.permission.create({ data: { name } }));
   const permRecords = await Promise.all(perms);
@@ -63,9 +63,18 @@ export async function setupTestDb(prisma: PrismaClient) {
       'order_tracking:read', 'invoice_plans:read', 'invoices:create', 'invoices:read', 'invoices:void', 'invoices:delete',
     ]),
     ...grant(accountingSupervisorRole.id, globalOrderInvoicePerms),
+    ...grant(supervisorRole.id, ['order_tracking:read', 'invoice_plans:read', 'invoice_plans:write_limited', 'invoices:read']),
   ]);
 
-  return { superAdminRole, adminRole, userRole, salesRepRole, accountingRole, accountingSupervisorRole };
+  return {
+    superAdminRole,
+    adminRole,
+    userRole,
+    salesRepRole,
+    accountingRole,
+    accountingSupervisorRole,
+    supervisorRole,
+  };
 }
 
 export async function createTestUser(
