@@ -34,7 +34,7 @@ const permissions = [
   { name: 'invoice_plans:read', description: 'Read all invoice plan lines' },
   { name: 'invoice_plans:read_own', description: 'Read own (salesRepCode-scoped) invoice plan lines' },
   { name: 'invoice_plans:write', description: 'Edit pending invoice plan lines (any field)' },
-  { name: 'invoice_plans:write_own_notes', description: "Edit only the notes field of own invoice plan lines" },
+  { name: 'invoice_plans:write_own_notes', description: 'Edit the notes/estimatedCompletionDate fields of own invoice plan lines' },
   { name: 'invoice_plans:delete', description: 'Delete pending invoice plan lines' },
   { name: 'invoices:create', description: 'Issue an invoice from a pending invoice plan line' },
   { name: 'invoices:read', description: 'Read all invoices' },

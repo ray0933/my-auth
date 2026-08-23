@@ -111,6 +111,7 @@ export default function OrderTrackingDetailPage() {
   const [planSaving, setPlanSaving] = useState(false);
   const [deletePlanTarget, setDeletePlanTarget] = useState<InvoicePlanRow | null>(null);
   const [repNotesDraft, setRepNotesDraft] = useState<Record<string, string>>({});
+  const [repCompletionDraft, setRepCompletionDraft] = useState<Record<string, string>>({});
 
   const [issuePlanId, setIssuePlanId] = useState<string | null>(null);
   const [issueForm, setIssueForm] = useState<IssueInvoiceFormState>({ invoiceNumber: '', invoiceDate: todayIsoDate(), notes: '' });
@@ -130,6 +131,7 @@ export default function OrderTrackingDetailPage() {
       setNotesDraft(otRes.data.data.notes ?? '');
       setOrderTypeDraft(otRes.data.data.orderType);
       setRepNotesDraft(Object.fromEntries(plansRes.data.data.map((p) => [p.id, p.notes ?? ''])));
+      setRepCompletionDraft(Object.fromEntries(plansRes.data.data.map((p) => [p.id, p.estimatedCompletionMonthStr])));
     } catch {
       setError('讀取失敗，或您沒有權限查看這筆資料。');
     }
@@ -231,6 +233,21 @@ export default function OrderTrackingDetailPage() {
     try {
       await api.patch(`/invoice-plans/${planId}`, { notes: repNotesDraft[planId] ?? '' });
       toast.success('備註已更新。');
+      load();
+    } catch {
+      toast.error('更新失敗。');
+    }
+  }
+
+  async function saveRepCompletion(planId: string) {
+    const roc = repCompletionDraft[planId] ?? '';
+    if (!isValidRocMonthStr(roc)) {
+      toast.error('請輸入正確的民國年月格式，例如 115-09。');
+      return;
+    }
+    try {
+      await api.patch(`/invoice-plans/${planId}`, { estimatedCompletionDate: monthToDate(rocMonthStrToAdMonth(roc)) });
+      toast.success('預估完成月份已更新。');
       load();
     } catch {
       toast.error('更新失敗。');
@@ -374,7 +391,22 @@ export default function OrderTrackingDetailPage() {
                 {plans.map((p) => (
                   <TableRow key={p.id}>
                     <TableCell>{p.plannedMonthStr}</TableCell>
-                    <TableCell>{p.estimatedCompletionMonthStr}</TableCell>
+                    <TableCell className="min-w-32">
+                      {isSalesRepOnly && p.status === 'pending' ? (
+                        <div className="flex gap-2">
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            className="h-8"
+                            value={repCompletionDraft[p.id] ?? ''}
+                            onChange={(e) => setRepCompletionDraft((d) => ({ ...d, [p.id]: e.target.value }))}
+                          />
+                          <Button size="xs" variant="outline" onClick={() => saveRepCompletion(p.id)}>存</Button>
+                        </div>
+                      ) : (
+                        p.estimatedCompletionMonthStr
+                      )}
+                    </TableCell>
                     <TableCell>{formatCurrency(p.plannedAmount)}</TableCell>
                     <TableCell><Badge variant={p.status === 'pending' ? 'secondary' : 'outline'}>{invoicePlanStatusLabel(p.status)}</Badge></TableCell>
                     <TableCell className="min-w-48">

@@ -67,7 +67,17 @@ export async function listInvoicePlans(
   return { success: true, data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
 }
 
-const FINANCIAL_FIELDS = ['plannedMonth', 'estimatedCompletionDate', 'plannedAmount'] as const;
+/** plannedMonth/plannedAmount/estimatedCompletionDate all describe the timing/amount
+ * of the plan line — once an invoice has been issued from it (status no longer
+ * `pending`), none of them can keep moving. Only `notes` stays editable at any
+ * status, for anyone who otherwise has some write access to the line. */
+const LOCKED_ONCE_INVOICED_FIELDS = ['plannedMonth', 'plannedAmount', 'estimatedCompletionDate'] as const;
+
+/** Fields a sales_rep may edit on their own plan lines: their read-only scope over
+ * InvoicePlan carves out these two as editable (notes for annotation, plus the
+ * operational completion-date estimate) — everything else stays out of reach.
+ * estimatedCompletionDate is still subject to the pending-only lock above. */
+const SALES_REP_EDITABLE_FIELDS = ['notes', 'estimatedCompletionDate'] as const;
 
 export async function updateInvoicePlan(
   id: string,
@@ -79,20 +89,20 @@ export async function updateInvoicePlan(
   if (!existing) throw new AppError('NOT_FOUND', 404);
 
   const submittedFields = Object.keys(dto);
-  const touchesFinancialFields = submittedFields.some((f) => (FINANCIAL_FIELDS as readonly string[]).includes(f));
 
   if (isScopedToOwnRecords(caller.roles)) {
     if (existing.orderTracking.salesRepCode !== caller.employeeCode) throw new AppError('NOT_FOUND', 404);
-    if (touchesFinancialFields || submittedFields.some((f) => f !== 'notes')) {
+    if (submittedFields.some((f) => !(SALES_REP_EDITABLE_FIELDS as readonly string[]).includes(f))) {
       throw new AppError('FORBIDDEN', 403);
     }
-  } else if (hasFullWriteAccess(caller.roles)) {
-    if (touchesFinancialFields && existing.status !== 'pending') {
-      throw new AppError('INVOICE_PLAN_NOT_PENDING', 409);
-    }
-  } else {
+  } else if (!hasFullWriteAccess(caller.roles)) {
     // e.g. accounting: read-only on InvoicePlan, no write permission at all.
     throw new AppError('FORBIDDEN', 403);
+  }
+
+  const touchesLockedFields = submittedFields.some((f) => (LOCKED_ONCE_INVOICED_FIELDS as readonly string[]).includes(f));
+  if (touchesLockedFields && existing.status !== 'pending') {
+    throw new AppError('INVOICE_PLAN_NOT_PENDING', 409);
   }
 
   const plannedMonth = dto.plannedMonth !== undefined ? toMonthStart(dto.plannedMonth) : undefined;

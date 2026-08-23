@@ -77,7 +77,7 @@ describe('invoicePlanService.updateInvoicePlan', () => {
     expect(invoicePlanRepo.update).toHaveBeenCalled();
   });
 
-  it('rejects financial-field edits once the plan is invoiced (409)', async () => {
+  it('rejects plannedMonth/plannedAmount edits once the plan is invoiced (409)', async () => {
     vi.mocked(invoicePlanRepo.findByIdWithOrderTracking).mockResolvedValue({
       ...mockPlan,
       status: 'invoiced',
@@ -92,6 +92,40 @@ describe('invoicePlanService.updateInvoicePlan', () => {
         'actor-1'
       )
     ).rejects.toMatchObject({ code: 'INVOICE_PLAN_NOT_PENDING' });
+  });
+
+  it('rejects estimatedCompletionDate edits once invoiced, even for accounting_supervisor (409)', async () => {
+    vi.mocked(invoicePlanRepo.findByIdWithOrderTracking).mockResolvedValue({
+      ...mockPlan,
+      status: 'invoiced',
+      orderTracking: mockOrderTracking,
+    });
+
+    await expect(
+      invoicePlanService.updateInvoicePlan(
+        'plan-1',
+        { estimatedCompletionDate: new Date('2026-09-15') },
+        { userId: 'u1', roles: ['accounting_supervisor'], employeeCode: null },
+        'actor-1'
+      )
+    ).rejects.toMatchObject({ code: 'INVOICE_PLAN_NOT_PENDING' });
+  });
+
+  it('lets accounting_supervisor edit estimatedCompletionDate while still pending', async () => {
+    vi.mocked(invoicePlanRepo.findByIdWithOrderTracking).mockResolvedValue({
+      ...mockPlan,
+      orderTracking: mockOrderTracking,
+    });
+    vi.mocked(invoicePlanRepo.update).mockResolvedValue(mockPlan);
+
+    await invoicePlanService.updateInvoicePlan(
+      'plan-1',
+      { estimatedCompletionDate: new Date('2026-09-15') },
+      { userId: 'u1', roles: ['accounting_supervisor'], employeeCode: null },
+      'actor-1'
+    );
+
+    expect(invoicePlanRepo.update).toHaveBeenCalled();
   });
 
   it('lets a sales_rep edit notes on their own plan line regardless of status', async () => {
@@ -112,7 +146,59 @@ describe('invoicePlanService.updateInvoicePlan', () => {
     expect(invoicePlanRepo.update).toHaveBeenCalledWith('plan-1', expect.objectContaining({ notes: 'called customer' }));
   });
 
-  it('rejects a sales_rep editing a non-notes field (403)', async () => {
+  it('lets a sales_rep edit estimatedCompletionDate on their own plan line while pending', async () => {
+    vi.mocked(invoicePlanRepo.findByIdWithOrderTracking).mockResolvedValue({
+      ...mockPlan,
+      orderTracking: mockOrderTracking,
+    });
+    vi.mocked(invoicePlanRepo.update).mockResolvedValue(mockPlan);
+
+    await invoicePlanService.updateInvoicePlan(
+      'plan-1',
+      { estimatedCompletionDate: new Date('2026-09-15') },
+      { userId: 'u2', roles: ['sales_rep'], employeeCode: 'S001' },
+      'u2'
+    );
+
+    const updateArg = vi.mocked(invoicePlanRepo.update).mock.calls[0]![1] as any;
+    expect(updateArg.estimatedCompletionMonthStr).toBe('115-09');
+  });
+
+  it('rejects a sales_rep editing estimatedCompletionDate once the plan is invoiced (409)', async () => {
+    vi.mocked(invoicePlanRepo.findByIdWithOrderTracking).mockResolvedValue({
+      ...mockPlan,
+      status: 'invoiced',
+      orderTracking: mockOrderTracking,
+    });
+
+    await expect(
+      invoicePlanService.updateInvoicePlan(
+        'plan-1',
+        { estimatedCompletionDate: new Date('2026-09-15') },
+        { userId: 'u2', roles: ['sales_rep'], employeeCode: 'S001' },
+        'u2'
+      )
+    ).rejects.toMatchObject({ code: 'INVOICE_PLAN_NOT_PENDING' });
+  });
+
+  it('lets a sales_rep edit both notes and estimatedCompletionDate together', async () => {
+    vi.mocked(invoicePlanRepo.findByIdWithOrderTracking).mockResolvedValue({
+      ...mockPlan,
+      orderTracking: mockOrderTracking,
+    });
+    vi.mocked(invoicePlanRepo.update).mockResolvedValue(mockPlan);
+
+    await invoicePlanService.updateInvoicePlan(
+      'plan-1',
+      { notes: 'delayed', estimatedCompletionDate: new Date('2026-10-01') },
+      { userId: 'u2', roles: ['sales_rep'], employeeCode: 'S001' },
+      'u2'
+    );
+
+    expect(invoicePlanRepo.update).toHaveBeenCalled();
+  });
+
+  it('rejects a sales_rep editing plannedMonth or plannedAmount (403)', async () => {
     vi.mocked(invoicePlanRepo.findByIdWithOrderTracking).mockResolvedValue({
       ...mockPlan,
       orderTracking: mockOrderTracking,
@@ -122,6 +208,15 @@ describe('invoicePlanService.updateInvoicePlan', () => {
       invoicePlanService.updateInvoicePlan(
         'plan-1',
         { plannedAmount: 500 },
+        { userId: 'u2', roles: ['sales_rep'], employeeCode: 'S001' },
+        'u2'
+      )
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+    await expect(
+      invoicePlanService.updateInvoicePlan(
+        'plan-1',
+        { plannedMonth: new Date('2026-11-01') },
         { userId: 'u2', roles: ['sales_rep'], employeeCode: 'S001' },
         'u2'
       )
