@@ -16,6 +16,7 @@ model User {
   lockedUntil        DateTime?
   failedAttempts     Int       @default(0)
   mfaSecret          String?
+  employeeCode       String?   @unique // matched against OrderTracking.salesRepCode for sales_rep row-level scoping; SQL Server needs a filtered unique index here (see migration SQL) since a plain UNIQUE rejects multiple NULLs
   myBossId           String?
   myBoss             User?     @relation("UserBoss", fields: [myBossId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   subordinates       User[]    @relation("UserBoss")
@@ -25,10 +26,13 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  roles               UserRole[]
-  refreshTokens       RefreshToken[]
-  passwordResetTokens PasswordResetToken[]
-  auditLogs           AuditLog[]
+  roles                 UserRole[]
+  refreshTokens         RefreshToken[]
+  passwordResetTokens   PasswordResetToken[]
+  auditLogs             AuditLog[]
+  createdOrderTrackings OrderTracking[]      @relation("OrderTrackingCreatedBy")
+  createdInvoicePlans   InvoicePlan[]        @relation("InvoicePlanCreatedBy")
+  issuedInvoices        Invoice[]            @relation("InvoiceIssuedBy")
 }
 
 model Role {
@@ -110,4 +114,94 @@ model AuditLog {
   @@index([userId])
   @@index([eventType])
   @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Order/Invoice tracking (Phase 1)
+//
+// Customer and Order master data live in an external ERP system, reachable
+// only via read-only MSSQL VIEWs on the same instance (see
+// src/repositories/erpOrder.repository.ts). This system does not own that
+// data — OrderTracking below is a lightweight local "tracking master" keyed
+// by an ERP order number, holding a point-in-time snapshot of a few ERP
+// fields plus our own progress-tracking data (InvoicePlan/Invoice).
+// ---------------------------------------------------------------------------
+
+model NumberSequence {
+  id           String @id @default(uuid())
+  scope        String @unique // e.g. "INVOICE:2026"
+  currentValue Int    @default(0)
+}
+
+model OrderTracking {
+  id                   String    @id @default(uuid())
+  orderNumber          String    @unique // ERP order number, entered by the user
+  orderType            String // general | maintenance | installment (user-selected, not an ERP snapshot field)
+  orderDate            DateTime? // ERP snapshot
+  customerShortName    String? // ERP snapshot
+  endUser              String? // ERP snapshot
+  projectName          String? // ERP snapshot
+  salesRepCode         String? // ERP snapshot; matched against User.employeeCode for sales_rep row-level scoping
+  salesRepName         String? // ERP snapshot
+  orderAmountUntaxed   Decimal?  @db.Decimal(18, 2) // ERP snapshot
+  estimatedCostUntaxed Decimal?  @db.Decimal(18, 2) // ERP snapshot
+  snapshotAt           DateTime? // when the ERP snapshot fields above were last (re)fetched
+  notes                String?
+  createdById          String?
+  createdByUser        User?     @relation("OrderTrackingCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  invoicePlans InvoicePlan[]
+  invoices     Invoice[]
+
+  @@index([orderType])
+  @@index([salesRepCode])
+}
+
+model InvoicePlan {
+  id                          String        @id @default(uuid())
+  orderTrackingId             String
+  orderTracking               OrderTracking @relation(fields: [orderTrackingId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  plannedMonth                DateTime // normalized to the 1st of the month
+  plannedMonthStr             String // ROC year-month, e.g. "115-07" (ROC year = AD year - 1911)
+  estimatedCompletionDate     DateTime // normalized to the 1st of the month
+  estimatedCompletionMonthStr String // same ROC-formatting rule as plannedMonthStr
+  plannedAmount               Decimal       @db.Decimal(18, 2) // untaxed amount
+  status                      String        @default("pending") // pending | invoiced | cancelled
+  invoiceId                   String?
+  invoice                     Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  notes                       String?
+  createdById                 String?
+  createdByUser               User?         @relation("InvoicePlanCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdAt                   DateTime      @default(now())
+  updatedAt                   DateTime      @updatedAt
+
+  @@index([orderTrackingId])
+  @@index([plannedMonth])
+  @@index([estimatedCompletionDate])
+  @@index([status])
+}
+
+model Invoice {
+  id              String        @id @default(uuid())
+  invoiceNumber   String        @unique
+  orderTrackingId String
+  orderTracking   OrderTracking @relation(fields: [orderTrackingId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  invoiceDate     DateTime      @default(now())
+  amount          Decimal       @db.Decimal(18, 2) // untaxed amount
+  taxAmount       Decimal       @db.Decimal(18, 2)
+  totalAmount     Decimal       @db.Decimal(18, 2)
+  status          String        @default("issued") // issued | void
+  voidedAt        DateTime?
+  voidReason      String?
+  issuedById      String?
+  issuedByUser    User?         @relation("InvoiceIssuedBy", fields: [issuedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  plans InvoicePlan[]
+
+  @@index([orderTrackingId])
+  @@index([status])
 }

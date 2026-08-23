@@ -11,6 +11,9 @@ const roles = [
   { name: 'super_admin', description: 'Full system access' },
   { name: 'admin', description: 'Administrative access' },
   { name: 'user', description: 'Standard user access' },
+  { name: 'sales_rep', description: '業務，僅能查看與標註自己名下的訂單追蹤資料' },
+  { name: 'accounting', description: '會計，可完整管理發票（含刪除），並唯讀瀏覽訂單追蹤與發票計畫' },
+  { name: 'accounting_supervisor', description: '會計主管，可完整管理所有訂單追蹤、發票計畫與發票' },
 ];
 
 const permissions = [
@@ -22,12 +25,45 @@ const permissions = [
   { name: 'roles:write', description: 'Manage roles' },
   { name: 'permissions:write', description: 'Manage permissions' },
   { name: 'audit:read', description: 'Read audit logs' },
+  // Order/Invoice tracking (Phase 1)
+  { name: 'order_tracking:create', description: 'Create order tracking records (from ERP snapshot)' },
+  { name: 'order_tracking:read', description: 'Read all order tracking records' },
+  { name: 'order_tracking:read_own', description: "Read own (salesRepCode-scoped) order tracking records" },
+  { name: 'order_tracking:write', description: 'Edit order tracking notes/orderType, resync ERP snapshot' },
+  { name: 'invoice_plans:create', description: 'Create invoice plan lines' },
+  { name: 'invoice_plans:read', description: 'Read all invoice plan lines' },
+  { name: 'invoice_plans:read_own', description: 'Read own (salesRepCode-scoped) invoice plan lines' },
+  { name: 'invoice_plans:write', description: 'Edit pending invoice plan lines (any field)' },
+  { name: 'invoice_plans:write_own_notes', description: "Edit only the notes field of own invoice plan lines" },
+  { name: 'invoice_plans:delete', description: 'Delete pending invoice plan lines' },
+  { name: 'invoices:create', description: 'Issue an invoice from a pending invoice plan line' },
+  { name: 'invoices:read', description: 'Read all invoices' },
+  { name: 'invoices:read_own', description: 'Read own (salesRepCode-scoped) invoices' },
+  { name: 'invoices:void', description: 'Void an issued invoice' },
+  { name: 'invoices:delete', description: 'Permanently delete an invoice (distinct from void)' },
 ];
 
 const rolePermissions: Record<string, string[]> = {
-  super_admin: ['users:create', 'users:read', 'users:write', 'users:delete', 'roles:read', 'roles:write', 'permissions:write', 'audit:read'],
-  admin: ['users:create', 'users:read', 'users:write', 'roles:read', 'audit:read'],
+  super_admin: [
+    'users:create', 'users:read', 'users:write', 'users:delete', 'roles:read', 'roles:write', 'permissions:write', 'audit:read',
+    'order_tracking:create', 'order_tracking:read', 'order_tracking:write',
+    'invoice_plans:create', 'invoice_plans:read', 'invoice_plans:write', 'invoice_plans:delete',
+    'invoices:create', 'invoices:read', 'invoices:void', 'invoices:delete',
+  ],
+  admin: [
+    'users:create', 'users:read', 'users:write', 'roles:read', 'audit:read',
+    'order_tracking:create', 'order_tracking:read', 'order_tracking:write',
+    'invoice_plans:create', 'invoice_plans:read', 'invoice_plans:write', 'invoice_plans:delete',
+    'invoices:create', 'invoices:read', 'invoices:void', 'invoices:delete',
+  ],
   user: ['users:read'],
+  sales_rep: ['order_tracking:read_own', 'invoice_plans:read_own', 'invoice_plans:write_own_notes', 'invoices:read_own'],
+  accounting: ['order_tracking:read', 'invoice_plans:read', 'invoices:create', 'invoices:read', 'invoices:void', 'invoices:delete'],
+  accounting_supervisor: [
+    'order_tracking:create', 'order_tracking:read', 'order_tracking:write',
+    'invoice_plans:create', 'invoice_plans:read', 'invoice_plans:write', 'invoice_plans:delete',
+    'invoices:create', 'invoices:read', 'invoices:void', 'invoices:delete',
+  ],
 };
 
 async function main() {

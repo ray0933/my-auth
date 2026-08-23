@@ -2,11 +2,13 @@ import { type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '@/components/ui/button';
+import { ADMIN_ROLES, ORDER_TRACKING_READ_ROLES, hasAnyRole } from '../lib/roles';
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const isAdmin = user?.roles.some((r) => r === 'admin' || r === 'super_admin');
+  const isAdmin = hasAnyRole(user?.roles, ADMIN_ROLES);
+  const canSeeOrderTracking = hasAnyRole(user?.roles, ORDER_TRACKING_READ_ROLES);
 
   async function handleLogout() {
     await logout();
@@ -19,6 +21,12 @@ export default function Layout({ children }: { children: ReactNode }) {
         <div className="flex items-center gap-6">
           <Link to="/dashboard" className="font-semibold text-base">AuthApp</Link>
           <Link to="/profile" className="text-muted-foreground hover:text-foreground text-sm">Profile</Link>
+          {canSeeOrderTracking && (
+            <>
+              <Link to="/order-trackings" className="text-muted-foreground hover:text-foreground text-sm">訂單追蹤</Link>
+              <Link to="/invoices" className="text-muted-foreground hover:text-foreground text-sm">發票</Link>
+            </>
+          )}
           {isAdmin && (
             <>
               <Link to="/admin/users" className="text-muted-foreground hover:text-foreground text-sm">Users</Link>

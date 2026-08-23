@@ -10,4 +10,5 @@ coverage/
 # Screenshots and browser test artifacts
 *.png
 *.pdf
+.playwright-cli/
 frontend/.playwright-cli/

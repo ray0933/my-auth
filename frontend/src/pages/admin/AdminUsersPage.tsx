@@ -44,7 +44,7 @@ export default function AdminUsersPage() {
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [createData, setCreateData] = useState({ email: '', displayName: '', roleName: '' });
+  const [createData, setCreateData] = useState({ email: '', displayName: '', roleName: '', employeeCode: '' });
   const [createError, setCreateError] = useState('');
   const [creating, setCreating] = useState(false);
 
@@ -120,9 +120,10 @@ export default function AdminUsersPage() {
         email: createData.email,
         displayName: createData.displayName || undefined,
         roles: createData.roleName ? [createData.roleName] : [],
+        employeeCode: createData.employeeCode || undefined,
       });
       setShowCreate(false);
-      setCreateData({ email: '', displayName: '', roleName: '' });
+      setCreateData({ email: '', displayName: '', roleName: '', employeeCode: '' });
       load();
       toast.success('User created.');
     } catch (err) {
@@ -283,6 +284,16 @@ export default function AdminUsersPage() {
                 </SelectContent>
               </Select>
             </div>
+            {createData.roleName === 'sales_rep' && (
+              <div className="space-y-1">
+                <Label>Employee code（業務員工代號，須對應 ERP 業務員工代號）</Label>
+                <Input
+                  type="text"
+                  value={createData.employeeCode}
+                  onChange={(e) => setCreateData((d) => ({ ...d, employeeCode: (e.target as HTMLInputElement).value }))}
+                />
+              </div>
+            )}
           </div>
           <DialogFooter>
             <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>

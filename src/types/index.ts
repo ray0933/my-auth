@@ -12,6 +12,8 @@ export interface AdminCreateUserDto {
   email: string;
   displayName?: string;
   roles: string[];
+  /** ERP employee code — needed for sales_rep row-level scoping (see CallerContext). */
+  employeeCode?: string;
 }
 
 export interface ChangePasswordDto {
@@ -64,6 +66,7 @@ export interface UserDto {
   roles: string[];
   mustChangePassword: boolean;
   isActive: boolean;
+  employeeCode: string | null;
   createdAt: Date;
 }
 
@@ -105,6 +108,122 @@ export const ERROR_CODES = {
   EMAIL_TAKEN: 'EMAIL_TAKEN',
   RATE_LIMITED: 'RATE_LIMITED',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
+  ORDER_NOT_FOUND_IN_ERP: 'ORDER_NOT_FOUND_IN_ERP',
+  ORDER_TRACKING_DUPLICATE: 'ORDER_TRACKING_DUPLICATE',
+  INVOICE_PLAN_NOT_PENDING: 'INVOICE_PLAN_NOT_PENDING',
+  INVOICE_ALREADY_VOID: 'INVOICE_ALREADY_VOID',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
+
+// ---------------------------------------------------------------------------
+// Order/Invoice tracking (Phase 1)
+// ---------------------------------------------------------------------------
+
+/** A caller's identity + row-level scoping info, threaded through the
+ * OrderTracking/InvoicePlan/Invoice services so they can restrict results to
+ * a sales_rep's own records. Not derived from the JWT (employeeCode isn't a
+ * token claim) — services look it up from the User table per-request. */
+export interface CallerContext {
+  userId: string;
+  roles: string[];
+  employeeCode: string | null;
+}
+
+/** Snapshot of ERP order fields fetched by order number, via a read-only VIEW. */
+export interface OrderSnapshot {
+  orderNumber: string;
+  orderDate: Date | null;
+  customerShortName: string | null;
+  endUser: string | null;
+  projectName: string | null;
+  salesRepCode: string | null;
+  salesRepName: string | null;
+  orderAmountUntaxed: string | null;
+  estimatedCostUntaxed: string | null;
+}
+
+export interface CreateOrderTrackingDto {
+  orderNumber: string;
+  orderType: string;
+  notes?: string;
+}
+
+export interface UpdateOrderTrackingDto {
+  orderType?: string;
+  notes?: string;
+}
+
+export interface OrderTrackingDto {
+  id: string;
+  orderNumber: string;
+  orderType: string;
+  orderDate: Date | null;
+  customerShortName: string | null;
+  endUser: string | null;
+  projectName: string | null;
+  salesRepCode: string | null;
+  salesRepName: string | null;
+  orderAmountUntaxed: string | null;
+  estimatedCostUntaxed: string | null;
+  remainingUninvoicedAmount: string | null;
+  snapshotAt: Date | null;
+  notes: string | null;
+  createdById: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateInvoicePlanDto {
+  plannedMonth: Date;
+  estimatedCompletionDate: Date;
+  plannedAmount: number;
+  notes?: string;
+}
+
+export interface UpdateInvoicePlanDto {
+  plannedMonth?: Date;
+  estimatedCompletionDate?: Date;
+  plannedAmount?: number;
+  notes?: string;
+}
+
+export interface InvoicePlanDto {
+  id: string;
+  orderTrackingId: string;
+  plannedMonth: Date;
+  plannedMonthStr: string;
+  estimatedCompletionDate: Date;
+  estimatedCompletionMonthStr: string;
+  plannedAmount: string;
+  status: string;
+  invoiceId: string | null;
+  notes: string | null;
+  createdById: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface IssueInvoiceDto {
+  invoicePlanId: string;
+}
+
+export interface VoidInvoiceDto {
+  voidReason: string;
+}
+
+export interface InvoiceDto {
+  id: string;
+  invoiceNumber: string;
+  orderTrackingId: string;
+  invoiceDate: Date;
+  amount: string;
+  taxAmount: string;
+  totalAmount: string;
+  status: string;
+  voidedAt: Date | null;
+  voidReason: string | null;
+  issuedById: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}

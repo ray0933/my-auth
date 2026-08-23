@@ -12,36 +12,61 @@ export async function setupTestDb(prisma: PrismaClient) {
   await prisma.auditLog.deleteMany();
   await prisma.passwordResetToken.deleteMany();
   await prisma.refreshToken.deleteMany();
+  // FK-safe order: InvoicePlan/Invoice restrict-delete their OrderTracking, so they
+  // must go first; NumberSequence has no dependents so its position doesn't matter.
+  await prisma.invoicePlan.deleteMany();
+  await prisma.invoice.deleteMany();
+  await prisma.orderTracking.deleteMany();
+  await prisma.numberSequence.deleteMany();
   await prisma.userRole.deleteMany();
   await prisma.rolePermission.deleteMany();
   await prisma.user.deleteMany();
   await prisma.role.deleteMany();
   await prisma.permission.deleteMany();
 
-  const roles = ['super_admin', 'admin', 'user'].map((name) =>
+  const roles = ['super_admin', 'admin', 'user', 'sales_rep', 'accounting', 'accounting_supervisor'].map((name) =>
     prisma.role.create({ data: { name, description: name } })
   );
-  const [superAdminRole, adminRole, userRole] = await Promise.all(roles);
+  const [superAdminRole, adminRole, userRole, salesRepRole, accountingRole, accountingSupervisorRole] =
+    await Promise.all(roles);
 
   const perms = [
     'users:create', 'users:read', 'users:write', 'users:delete',
     'roles:read', 'roles:write', 'permissions:write', 'audit:read',
+    'order_tracking:create', 'order_tracking:read', 'order_tracking:read_own', 'order_tracking:write',
+    'invoice_plans:create', 'invoice_plans:read', 'invoice_plans:read_own', 'invoice_plans:write',
+    'invoice_plans:write_own_notes', 'invoice_plans:delete',
+    'invoices:create', 'invoices:read', 'invoices:read_own', 'invoices:void', 'invoices:delete',
   ].map((name) => prisma.permission.create({ data: { name } }));
   const permRecords = await Promise.all(perms);
 
   const permMap = Object.fromEntries(permRecords.map((p) => [p.name, p]));
 
+  const grant = (roleId: string, permNames: string[]) =>
+    permNames.map((name) => prisma.rolePermission.create({ data: { roleId, permissionId: permMap[name]!.id } }));
+
+  const globalOrderInvoicePerms = [
+    'order_tracking:create', 'order_tracking:read', 'order_tracking:write',
+    'invoice_plans:create', 'invoice_plans:read', 'invoice_plans:write', 'invoice_plans:delete',
+    'invoices:create', 'invoices:read', 'invoices:void', 'invoices:delete',
+  ];
+
   await Promise.all([
     ...Object.values(permMap).map((p) =>
       prisma.rolePermission.create({ data: { roleId: superAdminRole.id, permissionId: p.id } })
     ),
-    prisma.rolePermission.create({ data: { roleId: adminRole.id, permissionId: permMap['users:create']!.id } }),
-    prisma.rolePermission.create({ data: { roleId: adminRole.id, permissionId: permMap['users:read']!.id } }),
-    prisma.rolePermission.create({ data: { roleId: adminRole.id, permissionId: permMap['users:write']!.id } }),
-    prisma.rolePermission.create({ data: { roleId: userRole.id, permissionId: permMap['users:read']!.id } }),
+    ...grant(adminRole.id, ['users:create', 'users:read', 'users:write', 'roles:read', 'audit:read', ...globalOrderInvoicePerms]),
+    ...grant(userRole.id, ['users:read']),
+    ...grant(salesRepRole.id, [
+      'order_tracking:read_own', 'invoice_plans:read_own', 'invoice_plans:write_own_notes', 'invoices:read_own',
+    ]),
+    ...grant(accountingRole.id, [
+      'order_tracking:read', 'invoice_plans:read', 'invoices:create', 'invoices:read', 'invoices:void', 'invoices:delete',
+    ]),
+    ...grant(accountingSupervisorRole.id, globalOrderInvoicePerms),
   ]);
 
-  return { superAdminRole, adminRole, userRole };
+  return { superAdminRole, adminRole, userRole, salesRepRole, accountingRole, accountingSupervisorRole };
 }
 
 export async function createTestUser(
@@ -52,6 +77,7 @@ export async function createTestUser(
     roleId: string;
     mustChangePassword?: boolean;
     isActive?: boolean;
+    employeeCode?: string;
   }
 ) {
   const passwordHash = await argon2.hash(opts.password, { type: argon2.argon2id });
@@ -61,6 +87,7 @@ export async function createTestUser(
       passwordHash,
       mustChangePassword: opts.mustChangePassword ?? false,
       isActive: opts.isActive ?? true,
+      employeeCode: opts.employeeCode,
     },
   });
   await prisma.userRole.create({ data: { userId: user.id, roleId: opts.roleId } });

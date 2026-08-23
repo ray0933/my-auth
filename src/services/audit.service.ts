@@ -16,7 +16,16 @@ export type AuditEventType =
   | 'permission_change'
   | 'account_lock'
   | 'account_enabled'
-  | 'account_disabled';
+  | 'account_disabled'
+  | 'order_tracking_created'
+  | 'order_tracking_synced'
+  | 'order_tracking_updated'
+  | 'invoice_plan_created'
+  | 'invoice_plan_updated'
+  | 'invoice_plan_deleted'
+  | 'invoice_issued'
+  | 'invoice_voided'
+  | 'invoice_deleted';
 
 interface AuditOptions {
   userId?: string;

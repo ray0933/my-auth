@@ -6,6 +6,9 @@ import { requestLogger } from './middleware/requestLogger';
 import authRoutes from './routes/auth.routes';
 import adminRoutes from './routes/admin.routes';
 import userRoutes from './routes/user.routes';
+import orderTrackingRoutes from './routes/orderTracking.routes';
+import invoicePlanRoutes from './routes/invoicePlan.routes';
+import invoiceRoutes from './routes/invoice.routes';
 
 export function createApp() {
   const app = express();
@@ -26,6 +29,9 @@ export function createApp() {
   app.use('/api/v1/auth', authRoutes);
   app.use('/api/v1/users', userRoutes);
   app.use('/api/v1/admin', adminRoutes);
+  app.use('/api/v1/order-trackings', orderTrackingRoutes);
+  app.use('/api/v1/invoice-plans', invoicePlanRoutes);
+  app.use('/api/v1/invoices', invoiceRoutes);
 
   app.use(errorHandler);
 

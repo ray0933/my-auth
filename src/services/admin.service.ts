@@ -13,6 +13,7 @@ function toUserDto(user: {
   displayName: string | null;
   mustChangePassword: boolean;
   isActive: boolean;
+  employeeCode: string | null;
   createdAt: Date;
 }, roles: string[]): UserDto {
   return {
@@ -22,6 +23,7 @@ function toUserDto(user: {
     roles,
     mustChangePassword: user.mustChangePassword,
     isActive: user.isActive,
+    employeeCode: user.employeeCode,
     createdAt: user.createdAt,
   };
 }
@@ -39,6 +41,7 @@ export async function createUser(dto: AdminCreateUserDto, actorId: string): Prom
     displayName: dto.displayName,
     mustChangePassword: true,
     createdById: actorId,
+    employeeCode: dto.employeeCode,
     roles: dto.roles,
   });
 
@@ -73,7 +76,7 @@ export async function getUserById(id: string): Promise<UserDto> {
 
 export async function updateUser(
   id: string,
-  data: { isActive?: boolean; displayName?: string },
+  data: { isActive?: boolean; displayName?: string; employeeCode?: string | null },
   actorId: string
 ): Promise<UserDto> {
   const user = await userRepo.findById(id);

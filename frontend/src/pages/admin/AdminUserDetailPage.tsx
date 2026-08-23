@@ -21,6 +21,7 @@ interface UserDetail {
   email: string;
   displayName: string | null;
   isActive: boolean;
+  employeeCode: string | null;
   createdAt: string;
   roles: Array<{ role: { id: string; name: string } }>;
 }
@@ -34,6 +35,7 @@ export default function AdminUserDetailPage() {
   const [allRoles, setAllRoles] = useState<Role[]>([]);
   const [displayName, setDisplayName] = useState('');
   const [isActive, setIsActive] = useState(true);
+  const [employeeCode, setEmployeeCode] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [addRoleId, setAddRoleId] = useState('');
@@ -48,6 +50,7 @@ export default function AdminUserDetailPage() {
       setUser(userRes.data.data);
       setDisplayName(userRes.data.data.displayName ?? '');
       setIsActive(userRes.data.data.isActive);
+      setEmployeeCode(userRes.data.data.employeeCode ?? '');
       setAllRoles(rolesRes.data.data);
     }).catch(() => setError('Failed to load user.'));
   }, [id]);
@@ -55,7 +58,7 @@ export default function AdminUserDetailPage() {
   async function save() {
     setSaving(true);
     try {
-      await api.patch(`/admin/users/${id}`, { displayName, isActive });
+      await api.patch(`/admin/users/${id}`, { displayName, isActive, employeeCode: employeeCode || null });
       toast.success('Changes saved.');
     } catch {
       toast.error('Failed to save.');
@@ -126,6 +129,14 @@ export default function AdminUserDetailPage() {
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName((e.target as HTMLInputElement).value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Employee code（業務員工代號，僅 sales_rep 需要）</Label>
+              <Input
+                type="text"
+                value={employeeCode}
+                onChange={(e) => setEmployeeCode((e.target as HTMLInputElement).value)}
               />
             </div>
             <div className="flex items-center gap-2">

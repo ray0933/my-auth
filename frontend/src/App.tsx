@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
-import { ProtectedRoute, PasswordChangeGuard, AdminRoute } from './components/RouteGuards';
+import { ProtectedRoute, PasswordChangeGuard, AdminRoute, OrderTrackingRoute, OrderTrackingManageRoute } from './components/RouteGuards';
 import LoginPage from './pages/LoginPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
@@ -13,6 +13,11 @@ import AdminUsersPage from './pages/admin/AdminUsersPage';
 import AdminUserDetailPage from './pages/admin/AdminUserDetailPage';
 import AdminRolesPage from './pages/admin/AdminRolesPage';
 import AdminPermissionsPage from './pages/admin/AdminPermissionsPage';
+import OrderTrackingsPage from './pages/orderTracking/OrderTrackingsPage';
+import OrderTrackingFormPage from './pages/orderTracking/OrderTrackingFormPage';
+import OrderTrackingDetailPage from './pages/orderTracking/OrderTrackingDetailPage';
+import InvoicesPage from './pages/invoices/InvoicesPage';
+import InvoiceDetailPage from './pages/invoices/InvoiceDetailPage';
 
 export default function App() {
   return (
@@ -41,6 +46,17 @@ export default function App() {
                 <Route path="/admin/users/:id" element={<AdminUserDetailPage />} />
                 <Route path="/admin/roles" element={<AdminRolesPage />} />
                 <Route path="/admin/permissions" element={<AdminPermissionsPage />} />
+              </Route>
+
+              {/* Order/Invoice tracking — sales_rep/accounting/accounting_supervisor/admin/super_admin */}
+              <Route element={<OrderTrackingRoute />}>
+                <Route path="/order-trackings" element={<OrderTrackingsPage />} />
+                <Route path="/order-trackings/:id" element={<OrderTrackingDetailPage />} />
+                <Route element={<OrderTrackingManageRoute />}>
+                  <Route path="/order-trackings/new" element={<OrderTrackingFormPage />} />
+                </Route>
+                <Route path="/invoices" element={<InvoicesPage />} />
+                <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
               </Route>
             </Route>
           </Route>

@@ -7,6 +7,7 @@ export interface CreateUserData {
   displayName?: string;
   mustChangePassword?: boolean;
   createdById?: string;
+  employeeCode?: string;
   roles: string[];
 }
 

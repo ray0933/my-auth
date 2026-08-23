@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import * as adminService from '../services/admin.service';
 import * as roleService from '../services/role.service';
 import { adminCreateUserSchema, updateUserSchema } from '../utils/validators';
+import { parsePageParams } from '../utils/pagination';
 import { z } from 'zod';
 
 type ParamReq = Request<{ id: string; roleId?: string; permId?: string }>;
@@ -18,8 +19,7 @@ export async function createUser(req: Request, res: Response, next: NextFunction
 
 export async function listUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const page = Math.max(1, parseInt(req.query['page'] as string) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query['limit'] as string) || 20));
+    const { page, limit } = parsePageParams(req.query);
     const result = await adminService.listUsers(page, limit);
     res.json(result);
   } catch (err) {

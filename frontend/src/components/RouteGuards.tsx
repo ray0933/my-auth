@@ -1,6 +1,7 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ADMIN_ROLES, ORDER_TRACKING_READ_ROLES, ORDER_TRACKING_FULL_WRITE_ROLES, hasAnyRole } from '../lib/roles';
 
 function LoadingScreen() {
   return (
@@ -27,7 +28,24 @@ export function PasswordChangeGuard() {
 
 export function AdminRoute() {
   const { user } = useAuth();
-  const isAdmin = user?.roles.some((r) => r === 'admin' || r === 'super_admin');
-  if (!isAdmin) return <Navigate to="/dashboard" replace />;
+  if (!hasAnyRole(user?.roles, ADMIN_ROLES)) return <Navigate to="/dashboard" replace />;
+  return <Outlet />;
+}
+
+/** Gates the OrderTracking/Invoice tracking pages. Each page then further restricts
+ * which buttons/fields are shown based on the caller's exact role (sales_rep is
+ * read-only + notes-only; accounting is read-only on OrderTracking but can manage
+ * Invoice; accounting_supervisor/admin/super_admin have full access) — see lib/roles.ts. */
+export function OrderTrackingRoute() {
+  const { user } = useAuth();
+  if (!hasAnyRole(user?.roles, ORDER_TRACKING_READ_ROLES)) return <Navigate to="/dashboard" replace />;
+  return <Outlet />;
+}
+
+/** Stricter guard for the create-OrderTracking page — sales_rep/accounting can see
+ * the list/detail pages (via OrderTrackingRoute) but not create new records. */
+export function OrderTrackingManageRoute() {
+  const { user } = useAuth();
+  if (!hasAnyRole(user?.roles, ORDER_TRACKING_FULL_WRITE_ROLES)) return <Navigate to="/order-trackings" replace />;
   return <Outlet />;
 }

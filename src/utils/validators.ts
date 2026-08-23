@@ -27,6 +27,7 @@ export const adminCreateUserSchema = z.object({
   email: z.string().email(),
   displayName: z.string().optional(),
   roles: z.array(z.string()).default([]),
+  employeeCode: z.string().optional(),
 });
 
 export const changePasswordSchema = z.object({
@@ -46,4 +47,44 @@ export const resetPasswordSchema = z.object({
 export const updateUserSchema = z.object({
   displayName: z.string().optional(),
   isActive: z.boolean().optional(),
+  employeeCode: z.string().nullable().optional(),
+});
+
+// ---------------------------------------------------------------------------
+// Order/Invoice tracking (Phase 1)
+// ---------------------------------------------------------------------------
+
+export const ORDER_TYPES = ['general', 'maintenance', 'installment'] as const;
+
+export const createOrderTrackingSchema = z.object({
+  orderNumber: z.string().min(1),
+  orderType: z.enum(ORDER_TYPES),
+  notes: z.string().optional(),
+});
+
+export const updateOrderTrackingSchema = z.object({
+  orderType: z.enum(ORDER_TYPES).optional(),
+  notes: z.string().optional(),
+});
+
+export const createInvoicePlanSchema = z.object({
+  plannedMonth: z.coerce.date(),
+  estimatedCompletionDate: z.coerce.date(),
+  plannedAmount: z.coerce.number().positive(),
+  notes: z.string().optional(),
+});
+
+export const updateInvoicePlanSchema = z.object({
+  plannedMonth: z.coerce.date().optional(),
+  estimatedCompletionDate: z.coerce.date().optional(),
+  plannedAmount: z.coerce.number().positive().optional(),
+  notes: z.string().optional(),
+});
+
+export const issueInvoiceSchema = z.object({
+  invoicePlanId: z.string().min(1),
+});
+
+export const voidInvoiceSchema = z.object({
+  voidReason: z.string().min(1),
 });
