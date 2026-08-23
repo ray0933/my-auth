@@ -3,17 +3,22 @@ import * as invoiceRepo from '../repositories/invoice.repository';
 import * as invoicePlanRepo from '../repositories/invoicePlan.repository';
 import { AppError } from '../utils/AppError';
 import { isScopedToOwnRecords } from '../utils/scopeContext';
-import { CallerContext, InvoiceDto, IssueInvoiceDto, PaginatedResponse, VoidInvoiceDto } from '../types';
+import { CallerContext, InvoiceDto, IssueInvoiceDto, PaginatedResponse, UpdateInvoiceDto, VoidInvoiceDto } from '../types';
 import { log } from './audit.service';
-import { nextInvoiceNumber } from './sequence.service';
 
 const TAX_RATE = 0.05;
 
-function toDto(row: Invoice): InvoiceDto {
+type InvoiceWithOrderTrackingSummary = Invoice & {
+  orderTracking: { orderNumber: string; customerShortName: string | null };
+};
+
+function toDto(row: InvoiceWithOrderTrackingSummary): InvoiceDto {
   return {
     id: row.id,
     invoiceNumber: row.invoiceNumber,
     orderTrackingId: row.orderTrackingId,
+    orderNumber: row.orderTracking.orderNumber,
+    customerShortName: row.orderTracking.customerShortName,
     invoiceDate: row.invoiceDate,
     amount: row.amount.toString(),
     taxAmount: row.taxAmount.toString(),
@@ -21,6 +26,7 @@ function toDto(row: Invoice): InvoiceDto {
     status: row.status,
     voidedAt: row.voidedAt,
     voidReason: row.voidReason,
+    notes: row.notes,
     issuedById: row.issuedById,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -32,17 +38,21 @@ export async function issueInvoice(dto: IssueInvoiceDto, actorId: string): Promi
   if (!plan) throw new AppError('NOT_FOUND', 404);
   if (plan.status !== 'pending') throw new AppError('INVOICE_PLAN_NOT_PENDING', 409);
 
+  const existingNumber = await invoiceRepo.findByInvoiceNumber(dto.invoiceNumber);
+  if (existingNumber) throw new AppError('INVOICE_NUMBER_TAKEN', 409);
+
   const amount = plan.plannedAmount;
   const taxAmount = amount.times(TAX_RATE).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
   const totalAmount = amount.plus(taxAmount);
-  const invoiceNumber = await nextInvoiceNumber();
 
   const created = await invoiceRepo.create({
-    invoiceNumber,
+    invoiceNumber: dto.invoiceNumber,
+    invoiceDate: dto.invoiceDate,
     orderTrackingId: plan.orderTrackingId,
     amount,
     taxAmount,
     totalAmount,
+    notes: dto.notes,
     issuedById: actorId,
   });
 
@@ -50,10 +60,16 @@ export async function issueInvoice(dto: IssueInvoiceDto, actorId: string): Promi
 
   await log('invoice_issued', {
     userId: actorId,
-    metadata: { invoiceId: created.id, invoiceNumber, invoicePlanId: plan.id, orderTrackingId: plan.orderTrackingId },
+    metadata: {
+      invoiceId: created.id,
+      invoiceNumber: dto.invoiceNumber,
+      invoicePlanId: plan.id,
+      orderTrackingId: plan.orderTrackingId,
+    },
   });
 
-  return toDto(created);
+  const withOrderTracking = await invoiceRepo.findByIdWithOrderTracking(created.id);
+  return toDto(withOrderTracking!);
 }
 
 export async function listInvoices(
@@ -77,8 +93,26 @@ export async function getInvoiceById(id: string, caller: CallerContext): Promise
   return toDto(row);
 }
 
+/** Currently only touches `notes` — invoiceNumber/invoiceDate/amounts are fixed at
+ * issuance (void + reissue is the corrective path for those). */
+export async function updateInvoice(id: string, dto: UpdateInvoiceDto, actorId: string): Promise<InvoiceDto> {
+  const existing = await invoiceRepo.findByIdWithOrderTracking(id);
+  if (!existing) throw new AppError('NOT_FOUND', 404);
+
+  const updated = await invoiceRepo.update(id, {
+    ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
+  });
+
+  await log('invoice_updated', {
+    userId: actorId,
+    metadata: { invoiceId: id, fields: Object.keys(dto) },
+  });
+
+  return toDto({ ...updated, orderTracking: existing.orderTracking });
+}
+
 export async function voidInvoice(id: string, dto: VoidInvoiceDto, actorId: string): Promise<InvoiceDto> {
-  const existing = await invoiceRepo.findById(id);
+  const existing = await invoiceRepo.findByIdWithOrderTracking(id);
   if (!existing) throw new AppError('NOT_FOUND', 404);
   if (existing.status === 'void') throw new AppError('INVOICE_ALREADY_VOID', 409);
 
@@ -98,7 +132,9 @@ export async function voidInvoice(id: string, dto: VoidInvoiceDto, actorId: stri
     metadata: { invoiceId: id, invoiceNumber: existing.invoiceNumber, voidReason: dto.voidReason },
   });
 
-  return toDto(updated);
+  // orderTracking association is immutable for an Invoice, so `existing`'s join is
+  // still valid — no need for another round trip just to re-fetch it.
+  return toDto({ ...updated, orderTracking: existing.orderTracking });
 }
 
 /** Hard delete — removes the Invoice row entirely (distinct from voidInvoice, which

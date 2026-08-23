@@ -15,6 +15,7 @@ const MANAGE_ROLES = ['accounting', 'accounting_supervisor', 'admin', 'super_adm
 router.post('/', requireRole(...MANAGE_ROLES), invoiceController.issueInvoice);
 router.get('/', requireRole(...READ_ROLES), invoiceController.listInvoices);
 router.get('/:id', requireRole(...READ_ROLES), invoiceController.getInvoice);
+router.patch('/:id', requireRole(...MANAGE_ROLES), invoiceController.updateInvoice);
 router.post('/:id/void', requireRole(...MANAGE_ROLES), invoiceController.voidInvoice);
 router.delete('/:id', requireRole(...MANAGE_ROLES), invoiceController.deleteInvoice);
 

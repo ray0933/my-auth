@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import * as invoiceService from '../services/invoice.service';
-import { issueInvoiceSchema, voidInvoiceSchema } from '../utils/validators';
+import { issueInvoiceSchema, updateInvoiceSchema, voidInvoiceSchema } from '../utils/validators';
 import { parsePageParams } from '../utils/pagination';
 import { getCallerContext } from '../utils/callerContext';
 
@@ -35,6 +35,16 @@ export async function getInvoice(req: ParamReq, res: Response, next: NextFunctio
   try {
     const caller = await getCallerContext(req);
     const invoice = await invoiceService.getInvoiceById(req.params.id, caller);
+    res.json({ success: true, data: invoice });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateInvoice(req: ParamReq, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const dto = updateInvoiceSchema.parse(req.body);
+    const invoice = await invoiceService.updateInvoice(req.params.id, dto, req.user.sub);
     res.json({ success: true, data: invoice });
   } catch (err) {
     next(err);

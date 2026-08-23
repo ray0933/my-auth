@@ -83,8 +83,15 @@ export const updateInvoicePlanSchema = z.object({
 
 export const issueInvoiceSchema = z.object({
   invoicePlanId: z.string().min(1),
+  invoiceNumber: z.string().min(1),
+  invoiceDate: z.coerce.date(),
+  notes: z.string().optional(),
 });
 
 export const voidInvoiceSchema = z.object({
   voidReason: z.string().min(1),
+});
+
+export const updateInvoiceSchema = z.object({
+  notes: z.string().optional(),
 });

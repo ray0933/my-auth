@@ -13,11 +13,10 @@ export async function setupTestDb(prisma: PrismaClient) {
   await prisma.passwordResetToken.deleteMany();
   await prisma.refreshToken.deleteMany();
   // FK-safe order: InvoicePlan/Invoice restrict-delete their OrderTracking, so they
-  // must go first; NumberSequence has no dependents so its position doesn't matter.
+  // must go first.
   await prisma.invoicePlan.deleteMany();
   await prisma.invoice.deleteMany();
   await prisma.orderTracking.deleteMany();
-  await prisma.numberSequence.deleteMany();
   await prisma.userRole.deleteMany();
   await prisma.rolePermission.deleteMany();
   await prisma.user.deleteMany();

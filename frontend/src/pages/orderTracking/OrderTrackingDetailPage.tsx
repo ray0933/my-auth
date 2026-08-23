@@ -9,6 +9,7 @@ import { hasAnyRole, ORDER_TRACKING_FULL_WRITE_ROLES, INVOICE_MANAGE_ROLES } fro
 import { formatCurrency, formatDate } from '../../lib/format';
 import { ORDER_TYPE_OPTIONS, orderTypeLabel } from '../../lib/orderType';
 import { invoicePlanStatusLabel, invoiceStatusLabel } from '../../lib/invoicePlanStatus';
+import { isValidRocMonthStr, rocMonthStrToAdMonth } from '../../lib/rocDate';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -58,9 +59,15 @@ interface InvoiceRow {
 }
 
 interface PlanFormState {
-  plannedMonth: string; // "YYYY-MM"
-  estimatedCompletionDate: string; // "YYYY-MM"
+  plannedMonth: string; // ROC year-month, e.g. "115-07"
+  estimatedCompletionDate: string; // ROC year-month, e.g. "115-08"
   plannedAmount: string;
+  notes: string;
+}
+
+interface IssueInvoiceFormState {
+  invoiceNumber: string;
+  invoiceDate: string; // "YYYY-MM-DD"
   notes: string;
 }
 
@@ -69,6 +76,15 @@ const emptyPlanForm: PlanFormState = { plannedMonth: '', estimatedCompletionDate
 function monthToDate(month: string): string {
   return `${month}-01`;
 }
+
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+const issueInvoiceErrorMessages: Record<string, string> = {
+  INVOICE_NUMBER_TAKEN: '這個發票編號已經被使用過，請換一個。',
+  INVOICE_PLAN_NOT_PENDING: '這筆計畫明細已經不是未開立狀態了，請重新整理頁面。',
+};
 
 export default function OrderTrackingDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -95,6 +111,10 @@ export default function OrderTrackingDetailPage() {
   const [planSaving, setPlanSaving] = useState(false);
   const [deletePlanTarget, setDeletePlanTarget] = useState<InvoicePlanRow | null>(null);
   const [repNotesDraft, setRepNotesDraft] = useState<Record<string, string>>({});
+
+  const [issuePlanId, setIssuePlanId] = useState<string | null>(null);
+  const [issueForm, setIssueForm] = useState<IssueInvoiceFormState>({ invoiceNumber: '', invoiceDate: todayIsoDate(), notes: '' });
+  const [issueSaving, setIssueSaving] = useState(false);
 
   async function load() {
     if (!id) return;
@@ -155,8 +175,8 @@ export default function OrderTrackingDetailPage() {
   function openEditPlanDialog(plan: InvoicePlanRow) {
     setEditingPlanId(plan.id);
     setPlanForm({
-      plannedMonth: plan.plannedMonth.slice(0, 7),
-      estimatedCompletionDate: plan.estimatedCompletionDate.slice(0, 7),
+      plannedMonth: plan.plannedMonthStr,
+      estimatedCompletionDate: plan.estimatedCompletionMonthStr,
       plannedAmount: plan.plannedAmount,
       notes: plan.notes ?? '',
     });
@@ -168,16 +188,16 @@ export default function OrderTrackingDetailPage() {
     try {
       if (editingPlanId) {
         await api.patch(`/invoice-plans/${editingPlanId}`, {
-          plannedMonth: monthToDate(planForm.plannedMonth),
-          estimatedCompletionDate: monthToDate(planForm.estimatedCompletionDate),
+          plannedMonth: monthToDate(rocMonthStrToAdMonth(planForm.plannedMonth)),
+          estimatedCompletionDate: monthToDate(rocMonthStrToAdMonth(planForm.estimatedCompletionDate)),
           plannedAmount: planForm.plannedAmount,
           notes: planForm.notes || undefined,
         });
         toast.success('計畫明細已更新。');
       } else {
         await api.post(`/order-trackings/${id}/invoice-plans`, {
-          plannedMonth: monthToDate(planForm.plannedMonth),
-          estimatedCompletionDate: monthToDate(planForm.estimatedCompletionDate),
+          plannedMonth: monthToDate(rocMonthStrToAdMonth(planForm.plannedMonth)),
+          estimatedCompletionDate: monthToDate(rocMonthStrToAdMonth(planForm.estimatedCompletionDate)),
           plannedAmount: planForm.plannedAmount,
           notes: planForm.notes || undefined,
         });
@@ -217,14 +237,30 @@ export default function OrderTrackingDetailPage() {
     }
   }
 
-  async function issueInvoice(planId: string) {
+  function openIssueDialog(planId: string) {
+    setIssuePlanId(planId);
+    setIssueForm({ invoiceNumber: '', invoiceDate: todayIsoDate(), notes: '' });
+  }
+
+  async function submitIssueInvoice() {
+    if (!issuePlanId) return;
+    setIssueSaving(true);
     try {
-      await api.post('/invoices', { invoicePlanId: planId });
+      await api.post('/invoices', {
+        invoicePlanId: issuePlanId,
+        invoiceNumber: issueForm.invoiceNumber,
+        invoiceDate: issueForm.invoiceDate,
+        notes: issueForm.notes || undefined,
+      });
       toast.success('發票已開立。');
+      setIssuePlanId(null);
       load();
     } catch (err) {
-      const axiosErr = err as AxiosError<{ error: { message: string } }>;
-      toast.error(axiosErr.response?.data?.error?.message ?? '開立失敗。');
+      const axiosErr = err as AxiosError<{ error: { code: string; message: string } }>;
+      const code = axiosErr.response?.data?.error?.code ?? '';
+      toast.error(issueInvoiceErrorMessages[code] ?? axiosErr.response?.data?.error?.message ?? '開立失敗。');
+    } finally {
+      setIssueSaving(false);
     }
   }
 
@@ -364,7 +400,7 @@ export default function OrderTrackingDetailPage() {
                           </>
                         )}
                         {canManageInvoices && p.status === 'pending' && (
-                          <Button variant="ghost" size="xs" onClick={() => issueInvoice(p.id)}>開立發票</Button>
+                          <Button variant="ghost" size="xs" onClick={() => openIssueDialog(p.id)}>開立發票</Button>
                         )}
                       </div>
                     </TableCell>
@@ -429,18 +465,26 @@ export default function OrderTrackingDetailPage() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1">
-              <Label>開立月份 *</Label>
+              <Label>
+                開立月份（民國年-月）* <span className="text-muted-foreground text-xs font-normal">例如 115-07</span>
+              </Label>
               <Input
-                type="month"
+                type="text"
+                inputMode="numeric"
+                placeholder="115-07"
                 value={planForm.plannedMonth}
                 disabled={!isEditingPending}
                 onChange={(e) => setPlanForm((f) => ({ ...f, plannedMonth: e.target.value }))}
               />
             </div>
             <div className="space-y-1">
-              <Label>預估完成月份 *</Label>
+              <Label>
+                預估完成月份（民國年-月）* <span className="text-muted-foreground text-xs font-normal">例如 115-08</span>
+              </Label>
               <Input
-                type="month"
+                type="text"
+                inputMode="numeric"
+                placeholder="115-08"
                 value={planForm.estimatedCompletionDate}
                 disabled={!isEditingPending}
                 onChange={(e) => setPlanForm((f) => ({ ...f, estimatedCompletionDate: e.target.value }))}
@@ -469,7 +513,13 @@ export default function OrderTrackingDetailPage() {
             <DialogClose render={<Button variant="outline" />}>取消</DialogClose>
             <Button
               onClick={savePlan}
-              disabled={planSaving || (isEditingPending && (!planForm.plannedMonth || !planForm.estimatedCompletionDate || !planForm.plannedAmount))}
+              disabled={
+                planSaving ||
+                (isEditingPending &&
+                  (!isValidRocMonthStr(planForm.plannedMonth) ||
+                    !isValidRocMonthStr(planForm.estimatedCompletionDate) ||
+                    !planForm.plannedAmount))
+              }
             >
               {planSaving ? '儲存中…' : '儲存'}
             </Button>
@@ -489,6 +539,47 @@ export default function OrderTrackingDetailPage() {
           <DialogFooter>
             <DialogClose render={<Button variant="outline" />}>取消</DialogClose>
             <Button variant="destructive" onClick={deletePlan}>刪除</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Issue invoice dialog */}
+      <Dialog open={!!issuePlanId} onOpenChange={(open) => { if (!open) setIssuePlanId(null); }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>開立發票</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>發票編號 *</Label>
+              <Input
+                type="text"
+                autoComplete="off"
+                value={issueForm.invoiceNumber}
+                onChange={(e) => setIssueForm((f) => ({ ...f, invoiceNumber: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>開立日期 *</Label>
+              <Input
+                type="date"
+                value={issueForm.invoiceDate}
+                onChange={(e) => setIssueForm((f) => ({ ...f, invoiceDate: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>備註</Label>
+              <Textarea value={issueForm.notes} onChange={(e) => setIssueForm((f) => ({ ...f, notes: e.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>取消</DialogClose>
+            <Button
+              onClick={submitIssueInvoice}
+              disabled={issueSaving || !issueForm.invoiceNumber || !issueForm.invoiceDate}
+            >
+              {issueSaving ? '開立中…' : '開立'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

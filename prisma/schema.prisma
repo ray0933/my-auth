@@ -127,12 +127,6 @@ model AuditLog {
 // fields plus our own progress-tracking data (InvoicePlan/Invoice).
 // ---------------------------------------------------------------------------
 
-model NumberSequence {
-  id           String @id @default(uuid())
-  scope        String @unique // e.g. "INVOICE:2026"
-  currentValue Int    @default(0)
-}
-
 model OrderTracking {
   id                   String    @id @default(uuid())
   orderNumber          String    @unique // ERP order number, entered by the user
@@ -195,6 +189,7 @@ model Invoice {
   status          String        @default("issued") // issued | void
   voidedAt        DateTime?
   voidReason      String?
+  notes           String?
   issuedById      String?
   issuedByUser    User?         @relation("InvoiceIssuedBy", fields: [issuedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
   createdAt       DateTime      @default(now())

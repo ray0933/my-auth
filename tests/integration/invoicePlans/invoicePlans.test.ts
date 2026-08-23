@@ -144,7 +144,10 @@ describe('InvoicePlan API', () => {
       .send({ plannedMonth: '2026-12-01', estimatedCompletionDate: '2026-12-01', plannedAmount: '400' });
     const planId = createRes.body.data.id;
 
-    const invoiceRes = await request(app).post('/api/v1/invoices').set('Authorization', `Bearer ${supToken}`).send({ invoicePlanId: planId });
+    const invoiceRes = await request(app)
+      .post('/api/v1/invoices')
+      .set('Authorization', `Bearer ${supToken}`)
+      .send({ invoicePlanId: planId, invoiceNumber: 'INV-TEST-2005', invoiceDate: '2026-08-22' });
     expect(invoiceRes.status).toBe(201);
 
     const failedDeleteRes = await request(app).delete(`/api/v1/invoice-plans/${planId}`).set('Authorization', `Bearer ${supToken}`);

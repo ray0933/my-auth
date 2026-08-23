@@ -25,6 +25,7 @@ export type AuditEventType =
   | 'invoice_plan_deleted'
   | 'invoice_issued'
   | 'invoice_voided'
+  | 'invoice_updated'
   | 'invoice_deleted';
 
 interface AuditOptions {

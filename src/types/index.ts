@@ -112,6 +112,7 @@ export const ERROR_CODES = {
   ORDER_TRACKING_DUPLICATE: 'ORDER_TRACKING_DUPLICATE',
   INVOICE_PLAN_NOT_PENDING: 'INVOICE_PLAN_NOT_PENDING',
   INVOICE_ALREADY_VOID: 'INVOICE_ALREADY_VOID',
+  INVOICE_NUMBER_TAKEN: 'INVOICE_NUMBER_TAKEN',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
@@ -206,16 +207,29 @@ export interface InvoicePlanDto {
 
 export interface IssueInvoiceDto {
   invoicePlanId: string;
+  /** Manually entered by the user — this system does not auto-generate invoice
+   * numbers (e.g. Taiwan's 統一發票 numbers are allocated outside this system). */
+  invoiceNumber: string;
+  invoiceDate: Date;
+  notes?: string;
 }
 
 export interface VoidInvoiceDto {
   voidReason: string;
 }
 
+export interface UpdateInvoiceDto {
+  notes?: string;
+}
+
 export interface InvoiceDto {
   id: string;
   invoiceNumber: string;
   orderTrackingId: string;
+  /** Snapshot fields from the linked OrderTracking, joined in for display —
+   * not stored redundantly on Invoice itself. */
+  orderNumber: string;
+  customerShortName: string | null;
   invoiceDate: Date;
   amount: string;
   taxAmount: string;
@@ -223,6 +237,7 @@ export interface InvoiceDto {
   status: string;
   voidedAt: Date | null;
   voidReason: string | null;
+  notes: string | null;
   issuedById: string | null;
   createdAt: Date;
   updatedAt: Date;

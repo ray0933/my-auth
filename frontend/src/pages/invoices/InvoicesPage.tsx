@@ -14,6 +14,8 @@ interface InvoiceRow {
   id: string;
   invoiceNumber: string;
   orderTrackingId: string;
+  orderNumber: string;
+  customerShortName: string | null;
   invoiceDate: string;
   amount: string;
   taxAmount: string;
@@ -71,12 +73,13 @@ export default function InvoicesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>發票編號</TableHead>
+                  <TableHead>訂單編號</TableHead>
+                  <TableHead>客戶簡稱</TableHead>
                   <TableHead>開立日期</TableHead>
                   <TableHead>未稅</TableHead>
                   <TableHead>稅額</TableHead>
                   <TableHead>含稅</TableHead>
                   <TableHead>狀態</TableHead>
-                  <TableHead>訂單</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -85,25 +88,26 @@ export default function InvoicesPage() {
                     <TableCell>
                       <Link to={`/invoices/${r.id}`} className="text-primary hover:underline">{r.invoiceNumber}</Link>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{formatDate(r.invoiceDate)}</TableCell>
-                    <TableCell>{formatCurrency(r.amount)}</TableCell>
-                    <TableCell>{formatCurrency(r.taxAmount)}</TableCell>
-                    <TableCell>{formatCurrency(r.totalAmount)}</TableCell>
-                    <TableCell><Badge variant={r.status === 'issued' ? 'secondary' : 'destructive'}>{invoiceStatusLabel(r.status)}</Badge></TableCell>
                     <TableCell>
                       <Button
                         variant="link"
                         className="h-auto p-0"
                         render={<Link to={`/order-trackings/${r.orderTrackingId}`} />}
                       >
-                        查看訂單
+                        {r.orderNumber}
                       </Button>
                     </TableCell>
+                    <TableCell className="text-muted-foreground">{r.customerShortName ?? '—'}</TableCell>
+                    <TableCell className="text-muted-foreground">{formatDate(r.invoiceDate)}</TableCell>
+                    <TableCell>{formatCurrency(r.amount)}</TableCell>
+                    <TableCell>{formatCurrency(r.taxAmount)}</TableCell>
+                    <TableCell>{formatCurrency(r.totalAmount)}</TableCell>
+                    <TableCell><Badge variant={r.status === 'issued' ? 'secondary' : 'destructive'}>{invoiceStatusLabel(r.status)}</Badge></TableCell>
                   </TableRow>
                 ))}
                 {rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">尚無發票。</TableCell>
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">尚無發票。</TableCell>
                   </TableRow>
                 )}
               </TableBody>

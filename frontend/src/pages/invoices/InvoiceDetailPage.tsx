@@ -26,6 +26,7 @@ interface InvoiceDetail {
   status: string;
   voidedAt: string | null;
   voidReason: string | null;
+  notes: string | null;
 }
 
 export default function InvoiceDetailPage() {
@@ -41,10 +42,14 @@ export default function InvoiceDetailPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  const [notesDraft, setNotesDraft] = useState('');
+  const [savingNotes, setSavingNotes] = useState(false);
+
   async function load() {
     try {
       const res = await api.get<{ data: InvoiceDetail }>(`/invoices/${id}`);
       setInvoice(res.data.data);
+      setNotesDraft(res.data.data.notes ?? '');
     } catch {
       setError('讀取失敗，或您沒有權限查看這張發票。');
     }
@@ -54,6 +59,19 @@ export default function InvoiceDetailPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  async function saveNotes() {
+    setSavingNotes(true);
+    try {
+      await api.patch(`/invoices/${id}`, { notes: notesDraft });
+      toast.success('備註已更新。');
+      load();
+    } catch {
+      toast.error('儲存失敗。');
+    } finally {
+      setSavingNotes(false);
+    }
+  }
 
   async function voidInvoice() {
     setBusy(true);
@@ -130,6 +148,24 @@ export default function InvoiceDetailPage() {
             <Link to={`/order-trackings/${invoice.orderTrackingId}`} className="text-primary hover:underline text-sm inline-block">
               查看所屬訂單追蹤 →
             </Link>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>備註</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {canManage ? (
+              <>
+                <Textarea value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} />
+                <Button size="sm" onClick={saveNotes} disabled={savingNotes}>
+                  {savingNotes ? '儲存中…' : '儲存'}
+                </Button>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">{invoice.notes || '—'}</p>
+            )}
           </CardContent>
         </Card>
 
