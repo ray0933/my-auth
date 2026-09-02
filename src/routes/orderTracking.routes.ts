@@ -4,6 +4,7 @@ import * as invoicePlanController from '../controllers/invoicePlan.controller';
 import { requireAuth } from '../middleware/authenticate';
 import { requireRole } from '../middleware/authorize';
 import { requirePasswordChanged } from '../middleware/passwordChanged';
+import { ORDER_TRACKING_READ_ROLES as READ_ROLES, ORDER_TRACKING_FULL_WRITE_ROLES as FULL_WRITE_ROLES } from '../utils/roles';
 
 const router = Router();
 
@@ -14,8 +15,6 @@ router.use(requirePasswordChanged());
 // salesRepCode); accounting/supervisor are read-only here too — only
 // accounting_supervisor/admin/super_admin can create/edit OrderTracking or its
 // InvoicePlan lines.
-const READ_ROLES = ['sales_rep', 'accounting', 'supervisor', 'accounting_supervisor', 'admin', 'super_admin'];
-const FULL_WRITE_ROLES = ['accounting_supervisor', 'admin', 'super_admin'];
 
 router.post('/', requireRole(...FULL_WRITE_ROLES), orderTrackingController.createOrderTracking);
 router.get('/', requireRole(...READ_ROLES), orderTrackingController.listOrderTrackings);

@@ -3,6 +3,7 @@ import * as invoicePlanController from '../controllers/invoicePlan.controller';
 import { requireAuth } from '../middleware/authenticate';
 import { requireRole } from '../middleware/authorize';
 import { requirePasswordChanged } from '../middleware/passwordChanged';
+import { ORDER_TRACKING_READ_ROLES as READ_WRITE_ROLES, ORDER_TRACKING_FULL_WRITE_ROLES as FULL_WRITE_ROLES } from '../utils/roles';
 
 const router = Router();
 
@@ -14,8 +15,6 @@ router.use(requirePasswordChanged());
 // estimatedCompletionDate only; supervisor: any record + notes/estimatedCompletionDate
 // only; accounting: read-only, PATCH always 403 since it has no invoice_plans:write*
 // permission at all).
-const READ_WRITE_ROLES = ['sales_rep', 'accounting', 'supervisor', 'accounting_supervisor', 'admin', 'super_admin'];
-const FULL_WRITE_ROLES = ['accounting_supervisor', 'admin', 'super_admin'];
 
 router.get('/', requireRole(...READ_WRITE_ROLES), invoicePlanController.listInvoicePlans);
 router.patch('/:id', requireRole(...READ_WRITE_ROLES), invoicePlanController.updateInvoicePlan);

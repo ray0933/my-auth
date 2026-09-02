@@ -3,14 +3,12 @@ import * as invoiceController from '../controllers/invoice.controller';
 import { requireAuth } from '../middleware/authenticate';
 import { requireRole } from '../middleware/authorize';
 import { requirePasswordChanged } from '../middleware/passwordChanged';
+import { ORDER_TRACKING_READ_ROLES as READ_ROLES, INVOICE_MANAGE_ROLES as MANAGE_ROLES } from '../utils/roles';
 
 const router = Router();
 
 router.use(requireAuth);
 router.use(requirePasswordChanged());
-
-const READ_ROLES = ['sales_rep', 'accounting', 'supervisor', 'accounting_supervisor', 'admin', 'super_admin'];
-const MANAGE_ROLES = ['accounting', 'accounting_supervisor', 'admin', 'super_admin'];
 
 router.post('/', requireRole(...MANAGE_ROLES), invoiceController.issueInvoice);
 router.get('/', requireRole(...READ_ROLES), invoiceController.listInvoices);
